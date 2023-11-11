@@ -38,7 +38,7 @@ func (s section) String() string {
 		}
 		return res
 	} else {
-		return fmt.Sprintf("# %s\n%+v", s.name, s.contents)
+		return fmt.Sprintf("# %s\n%+v\n", s.name, s.contents)
 	}
 }
 
@@ -72,6 +72,22 @@ type argSpan struct {
 
 func (a argSpan) String() string {
 	return fmt.Sprintf("\x1b[93m%s\x1b[0m", a.arg)
+}
+
+type list struct {
+	items []listItem
+}
+
+func (l list) String() string {
+	res := ""
+	for i, item := range l.items {
+		res += fmt.Sprintf("%d %+v\n", i, item.contents)
+	}
+	return res
+}
+
+type listItem struct {
+	contents []any
 }
 
 func parseFlagsAndArgs(line string) []any {
@@ -112,6 +128,16 @@ func parseMdoc(doc string) manPage {
 
 	page := manPage{}
 	var currentSection *section
+	currentList := list{}
+	var currentListItem *listItem
+
+	addSpans := func(spans... any) {
+		if currentListItem != nil {
+			currentListItem.contents = append(currentListItem.contents, spans...)
+		} else {
+			currentSection.contents = append(currentSection.contents, spans...)
+		}
+	}
 
 	for _, line := range strings.Split(doc, "\n") {
 		fmt.Printf("👀 %s\n", line)
@@ -147,10 +173,10 @@ func parseMdoc(doc string) manPage {
 			if savedName == "" { // first invocation, save the name
 				savedName = name
 			}
-			currentSection.contents = append(currentSection.contents, nameRef{name})
+			addSpans(nameRef{name})
 			if len(parts) > 2 {
 				// TODO: i think this adds blank spans
-				currentSection.contents = append(currentSection.contents, textSpan{text: parts[2]})
+				addSpans(textSpan{text: parts[2]})
 			}
 
 		case line == ".Nm": // .Nm - page name
@@ -158,7 +184,7 @@ func parseMdoc(doc string) manPage {
 				name := line[4:]
 				savedName = name
 			}
-			currentSection.contents = append(currentSection.contents, nameRef{savedName})
+			addSpans(nameRef{savedName})
 
 		case strings.HasPrefix(line, ".Nd"): // page description
 			currentSection.contents = append(currentSection.contents, textSpan{text: line[4:]})
@@ -167,20 +193,44 @@ func parseMdoc(doc string) manPage {
 			currentSection.contents = append(currentSection.contents, parseFlagsAndArgs(line[4:])...)
 
 		case strings.HasPrefix(line, ".Ar"): // argument
-			currentSection.contents = append(currentSection.contents, argSpan{line[4:]})
+			addSpans(argSpan{line[4:]})
+
+		case strings.HasPrefix(line, ".Fl"): // flag
+			addSpans(flagSpan{line[4:]})
 
 		case strings.HasPrefix(line, ".In"): // #include
-			currentSection.contents = append(currentSection.contents, textSpan{text: fmt.Sprintf("#include <%s>", line[4:])})
+			addSpans(textSpan{text: fmt.Sprintf("#include <%s>", line[4:])})
+
+		case strings.HasPrefix(line, ".Bl"): // begin list
+			// TODO: parse list options
+			currentList = list{}
+
+		case strings.HasPrefix(line, ".It"): // list item
+			if currentListItem != nil {
+				currentList.items = append(currentList.items, *currentListItem)
+			}
+
+			currentListItem = &listItem{}
+			if len(line) > 4 {
+				currentListItem.contents = append(currentListItem.contents, parseFlagsAndArgs(line[4:])...)
+			}
+
+		case strings.HasPrefix(line, ".El"): // end list
+			currentListItem = nil
+			currentSection.contents = append(currentSection.contents, currentList)
 
 		case strings.HasPrefix(line, ".Os"): // OS
 			// TODO: do we need this?
+
+		case line == ".Pp":
+			addSpans(textSpan{"\n\n"})
 
 		case line == ".":
 			// ignore
 
 		default:
 			fmt.Printf("?? %s\n", line)
-			currentSection.contents = append(currentSection.contents, parseFlagsAndArgs(line)...)
+			addSpans(parseFlagsAndArgs(line)...)
 
 		}
 	}
