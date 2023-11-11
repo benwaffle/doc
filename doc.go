@@ -14,24 +14,31 @@ type manPage struct {
 	name    string
 	section int
 	date    string
+	sections []section
 }
 
-func parseManDoc(doc string) manPage {
-	title, _ := regexp.Compile(`\.Dt ([A-Z]+) (\d+)`)
+type section struct {
+	name string
+}
+
+func parseMdoc(doc string) manPage {
+	title, _ := regexp.Compile(`\.Dt ([A-Z_]+) (\d+)`)
 
 	page := manPage{}
+	var currentSection *section
+
 	for _, line := range strings.Split(doc, "\n") {
+		fmt.Printf("👀 %s\n", line)
 		switch {
 
-		case strings.HasPrefix(line, ".\\\""):
-			fmt.Printf("// %s\n", line)
+		case strings.HasPrefix(line, ".\\\""): // comment
+			// ignore
 
-		case strings.HasPrefix(line, ".Dd "):
+		case strings.HasPrefix(line, ".Dd "): // document date
 			page.date = line[4:]
 
-		case title.MatchString(line):
+		case title.MatchString(line): // man page title
 			parts := title.FindStringSubmatch(line)
-			fmt.Println(parts)
 			page.name = parts[1]
 			section, err := strconv.Atoi(parts[2])
 			if err != nil {
@@ -39,11 +46,21 @@ func parseManDoc(doc string) manPage {
 			}
 			page.section = section
 
+		case strings.HasPrefix(line, ".Sh"): // section header
+			if currentSection != nil {
+				page.sections = append(page.sections, *currentSection)
+			}
+
+			currentSection = &section{
+				name: line[4:],
+			}
+
 		default:
 			fmt.Printf("?? %s\n", line)
 
 		}
 	}
+	page.sections = append(page.sections, *currentSection)
 	fmt.Printf("%v\n", page)
 	return page
 }
@@ -85,5 +102,5 @@ func main() {
 		panic(err)
 	}
 
-	parseManDoc(string(data))
+	parseMdoc(string(data))
 }
