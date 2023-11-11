@@ -31,11 +31,23 @@ type section struct {
 }
 
 func (s section) String() string {
-	return fmt.Sprintf("# %s\n%+v\n", s.name, s.contents)
+	if false {
+		res := "# " + s.name + "\n"
+		for i, span := range s.contents {
+			res += fmt.Sprintf("\t%d %+v\n", i, span)
+		}
+		return res
+	} else {
+		return fmt.Sprintf("# %s\n%+v", s.name, s.contents)
+	}
 }
 
 type nameRef struct {
-	text string
+	name string
+}
+
+func (n nameRef) String() string {
+	return fmt.Sprintf("\x1b[91m%s\x1b[0m", n.name)
 }
 
 type textSpan struct {
@@ -43,7 +55,53 @@ type textSpan struct {
 }
 
 func (t textSpan) String() string {
-	return fmt.Sprintf("[%s]", t.text)
+	return fmt.Sprintf("\x1b[4m%s\x1b[0m", t.text)
+}
+
+type flagSpan struct {
+	flag string
+}
+
+func (f flagSpan) String() string {
+	return fmt.Sprintf("\x1b[92m-%s\x1b[0m", f.flag)
+}
+
+type argSpan struct {
+	arg string
+}
+
+func (a argSpan) String() string {
+	return fmt.Sprintf("\x1b[93m%s\x1b[0m", a.arg)
+}
+
+func parseFlagsAndArgs(line string) []any {
+	if line == "" {
+		return nil
+	}
+
+	fl, _ := regexp.Compile(`Fl (\S+)`)
+	ar, _ := regexp.Compile(`Ar (\S+)`)
+
+	_ = ar
+
+	switch {
+	case fl.MatchString(line):
+		parts := fl.FindStringSubmatchIndex(line)
+		begin := line[:parts[0]]
+		flag := line[parts[2]:parts[3]]
+		rest := parseFlagsAndArgs(line[parts[3]:])
+		return append([]any{textSpan{begin}, flagSpan{flag}}, rest...)
+
+	case ar.MatchString(line):
+		parts := ar.FindStringSubmatchIndex(line)
+		begin := line[:parts[0]]
+		arg := line[parts[2]:parts[3]]
+		rest := parseFlagsAndArgs(line[parts[3]:])
+		return append([]any{textSpan{begin}, argSpan{arg}}, rest...)
+
+	default:
+		return []any{textSpan{line}}
+	}
 }
 
 func parseMdoc(doc string) manPage {
@@ -83,32 +141,38 @@ func parseMdoc(doc string) manPage {
 				name: line[4:],
 			}
 
-		case nameFull.MatchString(line):
+		case nameFull.MatchString(line): // .Nm - page name
 			parts := nameFull.FindStringSubmatch(line)
 			name := parts[1]
 			if savedName == "" { // first invocation, save the name
 				savedName = name
 			}
-			currentSection.contents = append(currentSection.contents, nameRef{text: name})
+			currentSection.contents = append(currentSection.contents, nameRef{name})
 			if len(parts) > 2 {
 				// TODO: i think this adds blank spans
 				currentSection.contents = append(currentSection.contents, textSpan{text: parts[2]})
 			}
 
-		case line == ".Nm":
+		case line == ".Nm": // .Nm - page name
 			if savedName == "" { // first invocation, save the name
 				name := line[4:]
 				savedName = name
 			}
-			currentSection.contents = append(currentSection.contents, nameRef{text: savedName})
+			currentSection.contents = append(currentSection.contents, nameRef{savedName})
 
-		case strings.HasPrefix(line, ".Nd"): // description
+		case strings.HasPrefix(line, ".Nd"): // page description
 			currentSection.contents = append(currentSection.contents, textSpan{text: line[4:]})
+
+		case strings.HasPrefix(line, ".Op"): // optional flag
+			currentSection.contents = append(currentSection.contents, parseFlagsAndArgs(line[4:])...)
+
+		case strings.HasPrefix(line, ".Ar"): // argument
+			currentSection.contents = append(currentSection.contents, argSpan{line[4:]})
 
 		case strings.HasPrefix(line, ".In"): // #include
 			currentSection.contents = append(currentSection.contents, textSpan{text: fmt.Sprintf("#include <%s>", line[4:])})
 
-		case strings.HasPrefix(line, ".Os"):
+		case strings.HasPrefix(line, ".Os"): // OS
 			// TODO: do we need this?
 
 		case line == ".":
@@ -116,7 +180,7 @@ func parseMdoc(doc string) manPage {
 
 		default:
 			fmt.Printf("?? %s\n", line)
-			currentSection.contents = append(currentSection.contents, textSpan{text: line})
+			currentSection.contents = append(currentSection.contents, parseFlagsAndArgs(line)...)
 
 		}
 	}
