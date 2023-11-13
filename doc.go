@@ -57,6 +57,8 @@ const (
 	tagSubsectionHeader
 	tagLiteral
 	tagSymbolic
+	tagStandard
+	tagParens
 )
 
 type textSpan struct {
@@ -67,7 +69,7 @@ type textSpan struct {
 func (t textSpan) String() string {
 	switch t.typ {
 	case tagPlain:
-		return fmt.Sprintf("\x1b[4m%s\x1b[0m", t.text)
+		return fmt.Sprintf("\x1b[0m%s\x1b[0m", t.text)
 	case tagNameRef:
 		return fmt.Sprintf("\x1b[91m%s\x1b[0m", t.text)
 	case tagArg:
@@ -86,6 +88,10 @@ func (t textSpan) String() string {
 		return t.text
 	case tagSymbolic:
 		return fmt.Sprintf("\x1b[91m%s\x1b[0m", t.text)
+	case tagStandard:
+		return fmt.Sprintf("\x1b[94m%s\x1b[0m", t.text)
+	case tagParens:
+		return fmt.Sprintf("(%s)", t.text)
 	default:
 		panic("unknown text tag")
 	}
@@ -206,6 +212,16 @@ func parseLine(line string) []any {
 			res = append(res, textSpan{tagLiteral, literal})
 			line = rest
 			lastMacro = "Li"
+		case "St":
+			standard, rest := nextToken(rest)
+			res = append(res, textSpan{tagStandard, standard})
+			line = rest
+			lastMacro = "St"
+		case "Pq":
+			parens, rest := nextToken(rest)
+			res = append(res, textSpan{tagParens, parens})
+			line = rest
+			lastMacro = "Pq"
 		case "Ns":
 			res = append(res, textSpan{tagNoSpace, ""})
 			line = rest
