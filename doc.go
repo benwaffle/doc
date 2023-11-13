@@ -108,6 +108,28 @@ func (o optional) String() string {
 	return fmt.Sprintf("[%+v]", o.contents)
 }
 
+type noSpace struct {}
+
+func (ns noSpace) String() string {
+	return ""
+}
+
+type variable struct {
+	name string
+}
+
+func (v variable) String() string {
+	return fmt.Sprintf("\x1b[95m%s\x1b[0m", v.name)
+}
+
+type path struct {
+	path string
+}
+
+func (p path) String() string {
+	return fmt.Sprintf("\x1b[96m%s\x1b[0m", p.path)
+}
+
 type list struct {
 	items []listItem
 }
@@ -164,6 +186,19 @@ func parseLine(line string) []any {
 			res = append(res, envVar{env})
 			line = rest
 			lastMacro = "Ev"
+		case "Va":
+			vari, rest := nextToken(rest)
+			res = append(res, variable{vari})
+			line = rest
+			lastMacro = "Va"
+		case "Pa":
+			pa, rest := nextToken(rest)
+			res = append(res, path{pa})
+			line = rest
+			lastMacro = "Pa"
+		case "Ns":
+			res = append(res, noSpace{})
+			line = rest
 		case "Op":
 			res = append(res, optional{parseLine(rest)})
 			break tokenizer
@@ -173,8 +208,8 @@ func parseLine(line string) []any {
 		case "":
 			break tokenizer
 		default:
-			res = append(res, textSpan{line})
-			break tokenizer
+			res = append(res, textSpan{token})
+			line = rest
 		}
 	}
 
@@ -249,7 +284,7 @@ func parseMdoc(doc string) manPage {
 			addSpans(nameRef{savedName})
 
 		case strings.HasPrefix(line, ".Nd"): // page description
-			currentSection.contents = append(currentSection.contents, textSpan{text: line[4:]})
+			addSpans(textSpan{text: line[4:]})
 
 		case strings.HasPrefix(line, ".In"): // #include
 			addSpans(textSpan{text: fmt.Sprintf("#include <%s>", line[4:])})
@@ -299,11 +334,9 @@ func parseMdoc(doc string) manPage {
 			// ignore
 
 		case strings.HasPrefix(line, "."):
-			fmt.Printf("?? %s\n", line)
 			addSpans(parseLine(line[1:])...)
 
 		default:
-			fmt.Printf("?? %s\n", line)
 			addSpans(parseLine(line)...)
 
 		}
