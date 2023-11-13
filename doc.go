@@ -25,6 +25,7 @@ func (m manPage) String() string {
 	return res
 }
 
+
 type section struct {
 	name     string
 	contents []any
@@ -42,21 +43,45 @@ func (s section) String() string {
 	}
 }
 
-type nameRef struct {
-	name string
-}
 
-func (n nameRef) String() string {
-	return fmt.Sprintf("\x1b[91m%s\x1b[0m", n.name)
-}
+type textTag int
+
+const (
+	tagPlain textTag = iota
+	tagNameRef
+	tagArg
+	tagEnvVar
+	tagNoSpace
+	tagVariable
+	tagPath
+)
 
 type textSpan struct {
+	typ textTag
 	text string
 }
 
 func (t textSpan) String() string {
-	return fmt.Sprintf("\x1b[4m%s\x1b[0m", t.text)
+	switch t.typ {
+	case tagPlain:
+		return fmt.Sprintf("\x1b[4m%s\x1b[0m", t.text)
+	case tagNameRef:
+		return fmt.Sprintf("\x1b[91m%s\x1b[0m", t.text)
+	case tagArg:
+		return fmt.Sprintf("\x1b[93m%s\x1b[0m", t.text)
+	case tagEnvVar:
+		return fmt.Sprintf("$%s", t.text)
+	case tagNoSpace:
+		return ""
+	case tagVariable:
+		return fmt.Sprintf("\x1b[95m%s\x1b[0m", t.text)
+	case tagPath:
+		return fmt.Sprintf("\x1b[96m%s\x1b[0m", t.text)
+	default:
+		panic("unknown text tag")
+	}
 }
+
 
 type flagSpan struct {
 	flag string
@@ -71,13 +96,6 @@ func (f flagSpan) String() string {
 	return fmt.Sprintf("\x1b[92m%s%s\x1b[0m", dash, f.flag)
 }
 
-type argSpan struct {
-	arg string
-}
-
-func (a argSpan) String() string {
-	return fmt.Sprintf("\x1b[93m%s\x1b[0m", a.arg)
-}
 
 type manRef struct {
 	name    string
@@ -92,13 +110,6 @@ func (m manRef) String() string {
 	return res
 }
 
-type envVar struct {
-	name string
-}
-
-func (e envVar) String() string {
-	return "$" + e.name
-}
 
 type optional struct {
 	contents []any
@@ -108,27 +119,6 @@ func (o optional) String() string {
 	return fmt.Sprintf("[%+v]", o.contents)
 }
 
-type noSpace struct {}
-
-func (ns noSpace) String() string {
-	return ""
-}
-
-type variable struct {
-	name string
-}
-
-func (v variable) String() string {
-	return fmt.Sprintf("\x1b[95m%s\x1b[0m", v.name)
-}
-
-type path struct {
-	path string
-}
-
-func (p path) String() string {
-	return fmt.Sprintf("\x1b[96m%s\x1b[0m", p.path)
-}
 
 type list struct {
 	items []listItem
@@ -146,6 +136,7 @@ type listItem struct {
 	tag []any
 	contents []any
 }
+
 
 func nextToken(input string) (string, string) {
 	loc := strings.Index(input, " ")
@@ -178,37 +169,37 @@ func parseLine(line string) []any {
 			lastMacro = "Cm"
 		case "Ar":
 			arg, rest := nextToken(rest)
-			res = append(res, argSpan{arg})
+			res = append(res, textSpan{tagArg, arg})
 			line = rest
 			lastMacro = "Ar"
 		case "Ev":
 			env, rest := nextToken(rest)
-			res = append(res, envVar{env})
+			res = append(res, textSpan{tagEnvVar, env})
 			line = rest
 			lastMacro = "Ev"
 		case "Va":
 			vari, rest := nextToken(rest)
-			res = append(res, variable{vari})
+			res = append(res, textSpan{tagVariable, vari})
 			line = rest
 			lastMacro = "Va"
 		case "Pa":
 			pa, rest := nextToken(rest)
-			res = append(res, path{pa})
+			res = append(res, textSpan{tagPath, pa})
 			line = rest
 			lastMacro = "Pa"
 		case "Ns":
-			res = append(res, noSpace{})
+			res = append(res, textSpan{tagNoSpace, ""})
 			line = rest
 		case "Op":
 			res = append(res, optional{parseLine(rest)})
 			break tokenizer
 		case ",", "|":
-			res = append(res, textSpan{token})
+			res = append(res, textSpan{tagPlain, token})
 			line = lastMacro + " " + rest
 		case "":
 			break tokenizer
 		default:
-			res = append(res, textSpan{token})
+			res = append(res, textSpan{tagPlain, token})
 			line = rest
 		}
 	}
@@ -270,7 +261,7 @@ func parseMdoc(doc string) manPage {
 			if savedName == "" { // first invocation, save the name
 				savedName = name
 			}
-			addSpans(nameRef{name})
+			addSpans(textSpan{tagNameRef, name})
 			if len(parts) > 2 {
 				// TODO: i think this adds blank spans
 				addSpans(textSpan{text: parts[2]})
@@ -281,7 +272,7 @@ func parseMdoc(doc string) manPage {
 				name := line[4:]
 				savedName = name
 			}
-			addSpans(nameRef{savedName})
+			addSpans(textSpan{tagNameRef, savedName})
 
 		case strings.HasPrefix(line, ".Nd"): // page description
 			addSpans(textSpan{text: line[4:]})
@@ -328,7 +319,7 @@ func parseMdoc(doc string) manPage {
 			// TODO: do we need this?
 
 		case line == ".Pp":
-			addSpans(textSpan{"\n\n"})
+			addSpans(textSpan{tagPlain, "\n\n"})
 
 		case line == "." || line == "":
 			// ignore
