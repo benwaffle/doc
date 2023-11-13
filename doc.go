@@ -60,10 +60,15 @@ func (t textSpan) String() string {
 
 type flagSpan struct {
 	flag string
+	dash bool
 }
 
 func (f flagSpan) String() string {
-	return fmt.Sprintf("\x1b[92m-%s\x1b[0m", f.flag)
+	dash := ""
+	if f.dash {
+		dash = "-"
+	}
+	return fmt.Sprintf("\x1b[92m%s%s\x1b[0m", dash, f.flag)
 }
 
 type argSpan struct {
@@ -74,6 +79,35 @@ func (a argSpan) String() string {
 	return fmt.Sprintf("\x1b[93m%s\x1b[0m", a.arg)
 }
 
+type manRef struct {
+	name    string
+	section *int
+}
+
+func (m manRef) String() string {
+	res := m.name
+	if m.section != nil {
+		res += fmt.Sprintf("(%d)", *m.section)
+	}
+	return res
+}
+
+type envVar struct {
+	name string
+}
+
+func (e envVar) String() string {
+	return "$" + e.name
+}
+
+type optional struct {
+	contents []any
+}
+
+func (o optional) String() string {
+	return fmt.Sprintf("[%+v]", o.contents)
+}
+
 type list struct {
 	items []listItem
 }
@@ -81,7 +115,7 @@ type list struct {
 func (l list) String() string {
 	res := ""
 	for i, item := range l.items {
-		res += fmt.Sprintf("%d %+v\n", i, item.contents)
+		res += fmt.Sprintf("\n%d %+v", i, item.contents)
 	}
 	return res
 }
@@ -90,40 +124,59 @@ type listItem struct {
 	contents []any
 }
 
-func parseFlagsAndArgs(line string) []any {
+func parseLine(line string) []any {
 	if line == "" {
 		return nil
 	}
 
-	fl, _ := regexp.Compile(`Fl (\S+)`)
-	ar, _ := regexp.Compile(`Ar (\S+)`)
+	fmt.Printf("parseLine: [%s]\n", line)
 
-	_ = ar
+	regex, _ := regexp.Compile(`(Fl|Ar|Cm|Ev|Op) (\S+)?`)
 
-	switch {
-	case fl.MatchString(line):
-		parts := fl.FindStringSubmatchIndex(line)
-		begin := line[:parts[0]]
-		flag := line[parts[2]:parts[3]]
-		rest := parseFlagsAndArgs(line[parts[3]:])
-		return append([]any{textSpan{begin}, flagSpan{flag}}, rest...)
+	if parts := regex.FindStringSubmatchIndex(line); parts != nil {
+		macro := line[parts[2]:parts[3]]
+		fmt.Printf("macro: %s\n", macro)
 
-	case ar.MatchString(line):
-		parts := ar.FindStringSubmatchIndex(line)
-		begin := line[:parts[0]]
-		arg := line[parts[2]:parts[3]]
-		rest := parseFlagsAndArgs(line[parts[3]:])
-		return append([]any{textSpan{begin}, argSpan{arg}}, rest...)
-
-	default:
-		return []any{textSpan{line}}
+		switch macro {
+		case "Fl": // flag
+			flag := line[parts[4]:parts[5]]
+			fmt.Printf("flag: %s\n", flag)
+			rest := line[parts[5]:]
+			return append([]any{flagSpan{flag, true}}, parseLine(rest)...)
+		case "Op": // optional
+			fmt.Printf("parts: %v\n", parts)
+			rest := line[parts[3]:]
+			return []any{
+				optional{parseLine(rest)},
+			}
+		case "Cm": // non-dash flag
+			flag := line[parts[4]:parts[5]]
+			fmt.Printf("flag: %s\n", flag)
+			rest := line[parts[5]:]
+			return append([]any{flagSpan{flag, false}}, parseLine(rest)...)
+		case "Ar": // argument
+			arg := line[parts[4]:parts[5]]
+			fmt.Printf("arg: %s\n", arg)
+			rest := line[parts[5]:]
+			return append([]any{argSpan{arg}}, parseLine(rest)...)
+		case "Ev": // environment variable
+			env := line[parts[4]:parts[5]]
+			fmt.Printf("env: %s\n", env)
+			rest := line[parts[5]:]
+			return append([]any{envVar{env}}, parseLine(rest)...)
+		default:
+			panic("unknown macro")
+		}
 	}
+
+	return []any{textSpan{line}}
 }
 
 func parseMdoc(doc string) manPage {
 	title, _ := regexp.Compile(`\.Dt ([A-Z_]+) (\d+)`)
+	xr, _ := regexp.Compile(`\.Xr (\S+)(?: (\d+))?`)
 	// .Nm macro
-	nameFull, _ := regexp.Compile(`\.Nm (\S+)(?: ([\S]+))?`)
+	nameFull, _ := regexp.Compile(`\.Nm (\S+)(?: (\S+))?`)
 	savedName := ""
 
 	page := manPage{}
@@ -131,7 +184,7 @@ func parseMdoc(doc string) manPage {
 	currentList := list{}
 	var currentListItem *listItem
 
-	addSpans := func(spans... any) {
+	addSpans := func(spans ...any) {
 		if currentListItem != nil {
 			currentListItem.contents = append(currentListItem.contents, spans...)
 		} else {
@@ -190,16 +243,27 @@ func parseMdoc(doc string) manPage {
 			currentSection.contents = append(currentSection.contents, textSpan{text: line[4:]})
 
 		case strings.HasPrefix(line, ".Op"): // optional flag
-			currentSection.contents = append(currentSection.contents, parseFlagsAndArgs(line[4:])...)
-
-		case strings.HasPrefix(line, ".Ar"): // argument
-			addSpans(argSpan{line[4:]})
-
-		case strings.HasPrefix(line, ".Fl"): // flag
-			addSpans(flagSpan{line[4:]})
+			// TODO: use a real optional struct
+			currentSection.contents = append(currentSection.contents, textSpan{"["})
+			currentSection.contents = append(currentSection.contents, parseLine(line[4:])...)
+			currentSection.contents = append(currentSection.contents, textSpan{"]"})
 
 		case strings.HasPrefix(line, ".In"): // #include
 			addSpans(textSpan{text: fmt.Sprintf("#include <%s>", line[4:])})
+
+		case xr.MatchString(line): // man reference
+			parts := xr.FindStringSubmatchIndex(line)
+			name := line[parts[2]:parts[3]]
+			var section *int
+			if len(parts) > 3 {
+				sec, err := strconv.Atoi(line[parts[4]:parts[5]])
+				if err != nil {
+					panic(err)
+				}
+				section = &sec
+			}
+			// TODO: parse rest of line
+			addSpans(manRef{name, section})
 
 		case strings.HasPrefix(line, ".Bl"): // begin list
 			// TODO: parse list options
@@ -212,11 +276,14 @@ func parseMdoc(doc string) manPage {
 
 			currentListItem = &listItem{}
 			if len(line) > 4 {
-				currentListItem.contents = append(currentListItem.contents, parseFlagsAndArgs(line[4:])...)
+				currentListItem.contents = append(currentListItem.contents, parseLine(line[4:])...)
 			}
 
 		case strings.HasPrefix(line, ".El"): // end list
-			currentListItem = nil
+			if currentListItem != nil {
+				currentList.items = append(currentList.items, *currentListItem)
+				currentListItem = nil
+			}
 			currentSection.contents = append(currentSection.contents, currentList)
 
 		case strings.HasPrefix(line, ".Os"): // OS
@@ -230,7 +297,7 @@ func parseMdoc(doc string) manPage {
 
 		default:
 			fmt.Printf("?? %s\n", line)
-			addSpans(parseFlagsAndArgs(line)...)
+			addSpans(parseLine(line)...)
 
 		}
 	}
@@ -265,10 +332,16 @@ func main() {
 	}
 
 	target := os.Args[1]
-	manFile := findDoc(target)
-	if manFile == "" {
-		fmt.Fprintf(os.Stderr, "cannot find man page for \"%s\"\n", target)
-		os.Exit(1)
+	var manFile string
+
+	if _, err := os.Stat(target); err == nil {
+		manFile = target
+	} else {
+		manFile = findDoc(target)
+		if manFile == "" {
+			fmt.Fprintf(os.Stderr, "cannot find man page for \"%s\"\n", target)
+			os.Exit(1)
+		}
 	}
 
 	fmt.Println(manFile)
