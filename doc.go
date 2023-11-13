@@ -242,12 +242,6 @@ func parseMdoc(doc string) manPage {
 		case strings.HasPrefix(line, ".Nd"): // page description
 			currentSection.contents = append(currentSection.contents, textSpan{text: line[4:]})
 
-		case strings.HasPrefix(line, ".Op"): // optional flag
-			// TODO: use a real optional struct
-			currentSection.contents = append(currentSection.contents, textSpan{"["})
-			currentSection.contents = append(currentSection.contents, parseLine(line[4:])...)
-			currentSection.contents = append(currentSection.contents, textSpan{"]"})
-
 		case strings.HasPrefix(line, ".In"): // #include
 			addSpans(textSpan{text: fmt.Sprintf("#include <%s>", line[4:])})
 
