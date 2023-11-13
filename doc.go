@@ -115,13 +115,22 @@ type list struct {
 func (l list) String() string {
 	res := ""
 	for i, item := range l.items {
-		res += fmt.Sprintf("\n%d %+v", i, item.contents)
+		res += fmt.Sprintf("\n%d\t%+v\t%+v", i, item.tag, item.contents)
 	}
 	return res
 }
 
 type listItem struct {
+	tag []any
 	contents []any
+}
+
+func nextToken(input string) (string, string) {
+	loc := strings.Index(input, " ")
+	if loc == -1 {
+		return input, ""
+	}
+	return input[:loc], input[loc+1:]
 }
 
 func parseLine(line string) []any {
@@ -129,47 +138,47 @@ func parseLine(line string) []any {
 		return nil
 	}
 
-	fmt.Printf("parseLine: [%s]\n", line)
+	var res []any
+	lastMacro := ""
 
-	regex, _ := regexp.Compile(`(Fl|Ar|Cm|Ev|Op) (\S+)?`)
-
-	if parts := regex.FindStringSubmatchIndex(line); parts != nil {
-		macro := line[parts[2]:parts[3]]
-		fmt.Printf("macro: %s\n", macro)
-
-		switch macro {
-		case "Fl": // flag
-			flag := line[parts[4]:parts[5]]
-			fmt.Printf("flag: %s\n", flag)
-			rest := line[parts[5]:]
-			return append([]any{flagSpan{flag, true}}, parseLine(rest)...)
-		case "Op": // optional
-			fmt.Printf("parts: %v\n", parts)
-			rest := line[parts[3]:]
-			return []any{
-				optional{parseLine(rest)},
-			}
-		case "Cm": // non-dash flag
-			flag := line[parts[4]:parts[5]]
-			fmt.Printf("flag: %s\n", flag)
-			rest := line[parts[5]:]
-			return append([]any{flagSpan{flag, false}}, parseLine(rest)...)
-		case "Ar": // argument
-			arg := line[parts[4]:parts[5]]
-			fmt.Printf("arg: %s\n", arg)
-			rest := line[parts[5]:]
-			return append([]any{argSpan{arg}}, parseLine(rest)...)
-		case "Ev": // environment variable
-			env := line[parts[4]:parts[5]]
-			fmt.Printf("env: %s\n", env)
-			rest := line[parts[5]:]
-			return append([]any{envVar{env}}, parseLine(rest)...)
+	tokenizer: for {
+		token, rest := nextToken(line)
+		switch token {
+		case "Fl":
+			flag, rest := nextToken(rest)
+			res = append(res, flagSpan{flag, true})
+			line = rest
+			lastMacro = "Fl"
+		case "Cm":
+			flag, rest := nextToken(rest)
+			res = append(res, flagSpan{flag, false})
+			line = rest
+			lastMacro = "Cm"
+		case "Ar":
+			arg, rest := nextToken(rest)
+			res = append(res, argSpan{arg})
+			line = rest
+			lastMacro = "Ar"
+		case "Ev":
+			env, rest := nextToken(rest)
+			res = append(res, envVar{env})
+			line = rest
+			lastMacro = "Ev"
+		case "Op":
+			res = append(res, optional{parseLine(rest)})
+			break tokenizer
+		case ",", "|":
+			res = append(res, textSpan{token})
+			line = lastMacro + " " + rest
+		case "":
+			break tokenizer
 		default:
-			panic("unknown macro")
+			res = append(res, textSpan{line})
+			break tokenizer
 		}
 	}
 
-	return []any{textSpan{line}}
+	return res
 }
 
 func parseMdoc(doc string) manPage {
@@ -270,7 +279,7 @@ func parseMdoc(doc string) manPage {
 
 			currentListItem = &listItem{}
 			if len(line) > 4 {
-				currentListItem.contents = append(currentListItem.contents, parseLine(line[4:])...)
+				currentListItem.tag = append(currentListItem.contents, parseLine(line[4:])...)
 			}
 
 		case strings.HasPrefix(line, ".El"): // end list
@@ -286,8 +295,12 @@ func parseMdoc(doc string) manPage {
 		case line == ".Pp":
 			addSpans(textSpan{"\n\n"})
 
-		case line == ".":
+		case line == "." || line == "":
 			// ignore
+
+		case strings.HasPrefix(line, "."):
+			fmt.Printf("?? %s\n", line)
+			addSpans(parseLine(line[1:])...)
 
 		default:
 			fmt.Printf("?? %s\n", line)
