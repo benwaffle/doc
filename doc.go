@@ -54,6 +54,9 @@ const (
 	tagNoSpace
 	tagVariable
 	tagPath
+	tagSubsectionHeader
+	tagLiteral
+	tagSymbolic
 )
 
 type textSpan struct {
@@ -77,6 +80,12 @@ func (t textSpan) String() string {
 		return fmt.Sprintf("\x1b[95m%s\x1b[0m", t.text)
 	case tagPath:
 		return fmt.Sprintf("\x1b[96m%s\x1b[0m", t.text)
+	case tagSubsectionHeader:
+		return fmt.Sprintf("\n\n\x1b[1m%s\x1b[0m\n======================\n", t.text)
+	case tagLiteral:
+		return t.text
+	case tagSymbolic:
+		return fmt.Sprintf("\x1b[91m%s\x1b[0m", t.text)
 	default:
 		panic("unknown text tag")
 	}
@@ -187,6 +196,16 @@ func parseLine(line string) []any {
 			res = append(res, textSpan{tagPath, pa})
 			line = rest
 			lastMacro = "Pa"
+		case "Sy":
+			sym, rest := nextToken(rest)
+			res = append(res, textSpan{tagSymbolic, sym})
+			line = rest
+			lastMacro = "Sy"
+		case "Li":
+			literal, rest := nextToken(rest)
+			res = append(res, textSpan{tagLiteral, literal})
+			line = rest
+			lastMacro = "Li"
 		case "Ns":
 			res = append(res, textSpan{tagNoSpace, ""})
 			line = rest
@@ -293,6 +312,13 @@ func parseMdoc(doc string) manPage {
 			}
 			// TODO: parse rest of line
 			addSpans(manRef{name, section})
+
+		case strings.HasPrefix(line, ".Ss"): // subsection header
+			addSpans(textSpan{tagSubsectionHeader, line[4:]})
+
+		case strings.HasPrefix(line, ".Dl"): // indented literal
+			addSpans(textSpan{tagPlain, "\t"})
+			addSpans(parseLine(line[4:])...)
 
 		case strings.HasPrefix(line, ".Bl"): // begin list
 			// TODO: parse list options
