@@ -379,10 +379,9 @@ func parseMdoc(doc string) manPage {
 	return page
 }
 
-func findDoc(target string) string {
+func findDocInDir(target string, dir string) string {
 	var foundPath string
-	// TODO: read $MANPATH
-	filepath.WalkDir("/usr/share/man", func(path string, d fs.DirEntry, err error) error {
+	filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		name := filepath.Base(path)
 		dir := filepath.Base(filepath.Dir(path))
 		section := strings.TrimPrefix(dir, "man")
@@ -396,6 +395,17 @@ func findDoc(target string) string {
 		return nil
 	})
 	return foundPath
+}
+
+func findDoc(target string) string {
+	manPath := os.Getenv("MANPATH")
+	for _, dir := range strings.Split(manPath, ":") {
+		path := findDocInDir(target, dir)
+		if path != "" {
+			return path
+		}
+	}
+	return findDocInDir(target, "/usr/share/man")
 }
 
 func main() {
