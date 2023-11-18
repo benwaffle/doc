@@ -419,6 +419,12 @@ func parseMdoc(doc string) manPage {
 
 			addSpans(textSpan{tagPlain, "\n" + strings.Repeat("  ", indent) + tag})
 
+		case strings.HasPrefix(line, ".TP"):
+			addSpans(textSpan{tagPlain, "\n"})
+
+		case strings.HasPrefix(line, ".ft"): // font
+			// not supported
+
 		case strings.HasPrefix(line, ".Bl"): // begin list
 			// TODO: parse list options
 			currentList = list{}
