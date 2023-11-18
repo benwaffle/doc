@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 type manPage struct {
@@ -467,7 +469,6 @@ func parseMdoc(doc string) manPage {
 		}
 	}
 	page.sections = append(page.sections, *currentSection)
-	fmt.Printf("%+v\n", page)
 	return page
 }
 
@@ -526,5 +527,16 @@ func main() {
 		panic(err)
 	}
 
-	parseMdoc(string(data))
+	page := parseMdoc(string(data))
+
+	p := tea.NewProgram(
+		model{page: page},
+		tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
+		tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
+	)
+
+	if _, err := p.Run(); err != nil {
+		fmt.Println("could not run program:", err)
+		os.Exit(1)
+	}
 }
