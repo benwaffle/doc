@@ -257,8 +257,10 @@ func parseMdoc(doc string) manPage {
 	addSpans := func(spans ...any) {
 		if currentListItem != nil {
 			currentListItem.contents = append(currentListItem.contents, spans...)
-		} else {
+		} else if currentSection != nil {
 			currentSection.contents = append(currentSection.contents, spans...)
+		} else {
+			panic("no current section")
 		}
 	}
 
@@ -266,7 +268,7 @@ func parseMdoc(doc string) manPage {
 		fmt.Printf("👀 %s\n", line)
 		switch {
 
-		case strings.HasPrefix(line, ".\\\""): // comment
+		case strings.HasPrefix(line, ".\\\"") || strings.HasPrefix(line, "'\\\""): // commenr
 			// ignore
 
 		case strings.HasPrefix(line, ".Dd"): // document date
