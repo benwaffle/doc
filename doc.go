@@ -233,23 +233,43 @@ tokenizer:
 			res = append(res, textSpan{tagItalic, italic})
 			line = rest
 			lastMacro = "I"
-		case "RI": // alternate roman and italic
-			state := "roman"
-			for {
+		case "BR": // alternate bold and normal
+			bold, rest := nextToken(rest)
+			if bold != "" {
+				res = append(res, textSpan{tagBold, bold})
+				line = "RB " + rest
+			} else {
 				line = rest
-				token, rest = nextToken(line)
-				if token == "" {
-					break
-				}
-				if state == "roman" {
-					res = append(res, textSpan{tagPlain, token})
-					state = "italic"
-				} else {
-					res = append(res, textSpan{tagItalic, token})
-					state = "roman"
-				}
 			}
-			lastMacro = ""
+			lastMacro = "BR"
+		case "RB": // alternate normal and bold
+			roman, rest := nextToken(rest)
+			if roman != "" {
+				res = append(res, textSpan{tagPlain, roman})
+				line = "BR " + rest
+			} else {
+				line = rest
+			}
+			lastMacro = "RB"
+		case "RI": // alternate normal and italic
+			roman, rest := nextToken(rest)
+			if roman != "" {
+				res = append(res, textSpan{tagPlain, roman})
+				line = "IR " + rest
+			} else {
+				line = rest
+			}
+			lastMacro = "RI"
+		case "IR": // alternate italic and normal
+			fmt.Printf("[%s] -> [%s][%s]\n", line, token, rest)
+			italic, rest := nextToken(rest)
+			if italic != "" {
+				res = append(res, textSpan{tagItalic, italic})
+				line = "RI " + rest
+			} else {
+				line = rest
+			}
+			lastMacro = "IR"
 		case "Ns":
 			res = append(res, textSpan{tagNoSpace, ""})
 			line = rest
@@ -401,7 +421,7 @@ func parseMdoc(doc string) manPage {
 		case strings.HasPrefix(line, ".Os"): // OS
 			// TODO: do we need this?
 
-		case line == ".Pp":
+		case line == ".Pp" || line == ".br":
 			addSpans(textSpan{tagPlain, "\n\n"})
 
 		case line == "." || line == "":
