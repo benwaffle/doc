@@ -15,6 +15,7 @@ type manPage struct {
 	section  int
 	date     string
 	sections []section
+	extra    string
 }
 
 func (m manPage) String() string {
@@ -24,7 +25,6 @@ func (m manPage) String() string {
 	}
 	return res
 }
-
 
 type section struct {
 	name     string
@@ -43,7 +43,6 @@ func (s section) String() string {
 	}
 }
 
-
 type textTag int
 
 const (
@@ -59,10 +58,12 @@ const (
 	tagSymbolic
 	tagStandard
 	tagParens
+	tagBold
+	tagItalic
 )
 
 type textSpan struct {
-	typ textTag
+	typ  textTag
 	text string
 }
 
@@ -92,11 +93,14 @@ func (t textSpan) String() string {
 		return fmt.Sprintf("\x1b[94m%s\x1b[0m", t.text)
 	case tagParens:
 		return fmt.Sprintf("(%s)", t.text)
+	case tagBold:
+		return fmt.Sprintf("\x1b[1m%s\x1b[0m", t.text)
+	case tagItalic:
+		return fmt.Sprintf("\x1b[3m%s\x1b[0m", t.text)
 	default:
 		panic("unknown text tag")
 	}
 }
-
 
 type flagSpan struct {
 	flag string
@@ -111,7 +115,6 @@ func (f flagSpan) String() string {
 	return fmt.Sprintf("\x1b[92m%s%s\x1b[0m", dash, f.flag)
 }
 
-
 type manRef struct {
 	name    string
 	section *int
@@ -125,7 +128,6 @@ func (m manRef) String() string {
 	return res
 }
 
-
 type optional struct {
 	contents []any
 }
@@ -133,7 +135,6 @@ type optional struct {
 func (o optional) String() string {
 	return fmt.Sprintf("[%+v]", o.contents)
 }
-
 
 type list struct {
 	items []listItem
@@ -148,10 +149,9 @@ func (l list) String() string {
 }
 
 type listItem struct {
-	tag []any
+	tag      []any
 	contents []any
 }
-
 
 func nextToken(input string) (string, string) {
 	loc := strings.Index(input, " ")
@@ -169,7 +169,8 @@ func parseLine(line string) []any {
 	var res []any
 	lastMacro := ""
 
-	tokenizer: for {
+tokenizer:
+	for {
 		token, rest := nextToken(line)
 		switch token {
 		case "Fl":
@@ -222,6 +223,33 @@ func parseLine(line string) []any {
 			res = append(res, textSpan{tagParens, parens})
 			line = rest
 			lastMacro = "Pq"
+		case "B":
+			bold, rest := nextToken(rest)
+			res = append(res, textSpan{tagBold, bold})
+			line = rest
+			lastMacro = "B"
+		case "I":
+			italic, rest := nextToken(rest)
+			res = append(res, textSpan{tagItalic, italic})
+			line = rest
+			lastMacro = "I"
+		case "RI": // alternate roman and italic
+			state := "roman"
+			for {
+				line = rest
+				token, rest = nextToken(line)
+				if token == "" {
+					break
+				}
+				if state == "roman" {
+					res = append(res, textSpan{tagPlain, token})
+					state = "italic"
+				} else {
+					res = append(res, textSpan{tagItalic, token})
+					state = "roman"
+				}
+			}
+			lastMacro = ""
 		case "Ns":
 			res = append(res, textSpan{tagNoSpace, ""})
 			line = rest
@@ -243,7 +271,7 @@ func parseLine(line string) []any {
 }
 
 func parseMdoc(doc string) manPage {
-	title, _ := regexp.Compile(`\.Dt ([A-Z_]+) (\d+)`)
+	mdocTitle, _ := regexp.Compile(`\.Dt ([A-Z_]+) (\d+)`)
 	xr, _ := regexp.Compile(`\.Xr (\S+)(?: (\d+))?`)
 	// .Nm macro
 	nameFull, _ := regexp.Compile(`\.Nm (\S+)(?: (\S+))?`)
@@ -274,8 +302,8 @@ func parseMdoc(doc string) manPage {
 		case strings.HasPrefix(line, ".Dd"): // document date
 			page.date = line[4:]
 
-		case title.MatchString(line): // man page title
-			parts := title.FindStringSubmatch(line)
+		case mdocTitle.MatchString(line): // mdoc page title
+			parts := mdocTitle.FindStringSubmatch(line)
 			page.name = parts[1]
 			section, err := strconv.Atoi(parts[2])
 			if err != nil {
@@ -283,7 +311,18 @@ func parseMdoc(doc string) manPage {
 			}
 			page.section = section
 
-		case strings.HasPrefix(line, ".Sh"): // section header
+		case strings.HasPrefix(line, ".TH"): // man page title
+			parts := strings.Split(line[4:], " ")
+			page.name = parts[0]
+			section, err := strconv.Atoi(parts[1])
+			if err != nil {
+				panic(err)
+			}
+			page.section = section
+			page.date = parts[2]
+			page.extra = parts[3] + " " + parts[4]
+
+		case strings.HasPrefix(line, ".Sh") || strings.HasPrefix(line, ".SH"): // section header
 			if currentSection != nil {
 				page.sections = append(page.sections, *currentSection)
 			}
