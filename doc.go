@@ -173,62 +173,62 @@ tokenizer:
 	for {
 		token, rest := nextToken(line)
 		switch token {
-		case "Fl":
+		case "Fl": // command line flag with dash
 			flag, rest := nextToken(rest)
 			res = append(res, flagSpan{flag, true})
 			line = rest
 			lastMacro = "Fl"
-		case "Cm":
+		case "Cm": // command line something with no dash
 			flag, rest := nextToken(rest)
 			res = append(res, flagSpan{flag, false})
 			line = rest
 			lastMacro = "Cm"
-		case "Ar":
+		case "Ar": // command line argument
 			arg, rest := nextToken(rest)
 			res = append(res, textSpan{tagArg, arg})
 			line = rest
 			lastMacro = "Ar"
-		case "Ev":
+		case "Ev": // environment variable
 			env, rest := nextToken(rest)
 			res = append(res, textSpan{tagEnvVar, env})
 			line = rest
 			lastMacro = "Ev"
-		case "Va":
+		case "Va": // variable
 			vari, rest := nextToken(rest)
 			res = append(res, textSpan{tagVariable, vari})
 			line = rest
 			lastMacro = "Va"
-		case "Pa":
+		case "Pa": // path
 			pa, rest := nextToken(rest)
 			res = append(res, textSpan{tagPath, pa})
 			line = rest
 			lastMacro = "Pa"
-		case "Sy":
+		case "Sy": // symbolic
 			sym, rest := nextToken(rest)
 			res = append(res, textSpan{tagSymbolic, sym})
 			line = rest
 			lastMacro = "Sy"
-		case "Li":
+		case "Li": // literal
 			literal, rest := nextToken(rest)
 			res = append(res, textSpan{tagLiteral, literal})
 			line = rest
 			lastMacro = "Li"
-		case "St":
+		case "St": // standard
 			standard, rest := nextToken(rest)
 			res = append(res, textSpan{tagStandard, standard})
 			line = rest
 			lastMacro = "St"
-		case "Pq":
+		case "Pq": // parens
 			parens, rest := nextToken(rest)
 			res = append(res, textSpan{tagParens, parens})
 			line = rest
 			lastMacro = "Pq"
-		case "B":
+		case "B": // bold
 			bold, rest := nextToken(rest)
 			res = append(res, textSpan{tagBold, bold})
 			line = rest
 			lastMacro = "B"
-		case "I":
+		case "I": // italic
 			italic, rest := nextToken(rest)
 			res = append(res, textSpan{tagItalic, italic})
 			line = rest
@@ -261,7 +261,6 @@ tokenizer:
 			}
 			lastMacro = "RI"
 		case "IR": // alternate italic and normal
-			fmt.Printf("[%s] -> [%s][%s]\n", line, token, rest)
 			italic, rest := nextToken(rest)
 			if italic != "" {
 				res = append(res, textSpan{tagItalic, italic})
@@ -270,10 +269,10 @@ tokenizer:
 				line = rest
 			}
 			lastMacro = "IR"
-		case "Ns":
+		case "Ns": // no space
 			res = append(res, textSpan{tagNoSpace, ""})
 			line = rest
-		case "Op":
+		case "Op": // optional
 			res = append(res, optional{parseLine(rest)})
 			break tokenizer
 		case ",", "|":
@@ -390,12 +389,35 @@ func parseMdoc(doc string) manPage {
 			// TODO: parse rest of line
 			addSpans(manRef{name, section})
 
-		case strings.HasPrefix(line, ".Ss"): // subsection header
+		case strings.HasPrefix(line, ".Ss") || strings.HasPrefix(line, ".SS"): // subsection header
 			addSpans(textSpan{tagSubsectionHeader, line[4:]})
 
 		case strings.HasPrefix(line, ".Dl"): // indented literal
 			addSpans(textSpan{tagPlain, "\t"})
 			addSpans(parseLine(line[4:])...)
+
+		case strings.HasPrefix(line, ".IP"): // indented paragraph
+			arg1, rest := nextToken(line[4:])
+			tag := ""
+			if arg1 == `\(bu` {
+				tag = "•"
+			} else if arg1 == `\(em` {
+				tag = "—"
+			} else {
+				tag = arg1
+			}
+
+			arg2, _ := nextToken(rest)
+			indent := 0
+			if arg2 != "" {
+				indentVal, err := strconv.Atoi(arg2)
+				if err != nil {
+					panic(err)
+				}
+				indent = indentVal
+			}
+
+			addSpans(textSpan{tagPlain, "\n" + strings.Repeat("  ", indent) + tag})
 
 		case strings.HasPrefix(line, ".Bl"): // begin list
 			// TODO: parse list options
@@ -421,8 +443,11 @@ func parseMdoc(doc string) manPage {
 		case strings.HasPrefix(line, ".Os"): // OS
 			// TODO: do we need this?
 
-		case line == ".Pp" || line == ".br":
+		case line == ".Pp" || line == ".PP":
 			addSpans(textSpan{tagPlain, "\n\n"})
+
+		case line == ".br":
+			addSpans(textSpan{tagPlain, "\n"})
 
 		case line == "." || line == "":
 			// ignore
