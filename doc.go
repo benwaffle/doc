@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bufio"
+	"compress/gzip"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -479,8 +482,7 @@ func findDocInDir(target string, dir string) string {
 		dir := filepath.Base(filepath.Dir(path))
 		section := strings.TrimPrefix(dir, "man")
 
-		// TODO: handle .gz
-		if name == fmt.Sprintf("%s.%s", target, section) {
+		if name == fmt.Sprintf("%s.%s", target, section) || name == fmt.Sprintf("%s.%s.gz", target, section) {
 			foundPath = path
 			return filepath.SkipAll
 		}
@@ -499,6 +501,30 @@ func findDoc(target string) string {
 		}
 	}
 	return findDocInDir(target, "/usr/share/man")
+}
+
+func readManPage(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", nil
+	}
+	defer file.Close()
+
+	var reader io.Reader = bufio.NewReader(file)
+
+	if strings.HasSuffix(path, ".gz") {
+		gzipReader, err := gzip.NewReader(reader)
+		if err != nil {
+			return "", err
+		}
+		reader = gzipReader
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return "", err
+	}
+
+	return string(data), nil
 }
 
 func main() {
@@ -522,12 +548,12 @@ func main() {
 
 	fmt.Println(manFile)
 
-	data, err := os.ReadFile(manFile)
+	data, err := readManPage(manFile)
 	if err != nil {
 		panic(err)
 	}
 
-	page := parseMdoc(string(data))
+	page := parseMdoc(data)
 
 	p := tea.NewProgram(
 		model{page: page},
