@@ -110,12 +110,14 @@ type flagSpan struct {
 	dash bool
 }
 
+var flagStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+
 func (f flagSpan) String() string {
 	dash := ""
 	if f.dash {
 		dash = "-"
 	}
-	return fmt.Sprintf("\x1b[92m%s%s\x1b[0m", dash, f.flag)
+	return flagStyle.Render(dash + f.flag)
 }
 
 type manRef struct {
@@ -293,10 +295,9 @@ tokenizer:
 }
 
 func parseMdoc(doc string) manPage {
-	mdocTitle, _ := regexp.Compile(`\.Dt ([A-Z_]+) (\d+)`)
-	xr, _ := regexp.Compile(`\.Xr (\S+)(?: (\d+))?`)
-	// .Nm macro
-	nameFull, _ := regexp.Compile(`\.Nm (\S+)(?: (\S+))?`)
+	mdocTitle, _ := regexp.Compile(`\.Dt ([A-Z_]+) (\d+)`) // .Dt macro
+	xr, _ := regexp.Compile(`\.Xr (\S+)(?: (\d+))?`)       // .Xr macro
+	nameFull, _ := regexp.Compile(`\.Nm (\S+)(?: (\S+))?`) // .Nm macro
 	savedName := ""
 
 	page := manPage{}
