@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type manPage struct {
@@ -67,41 +68,38 @@ const (
 	tagItalic
 )
 
+var styles = map[textTag]lipgloss.Style{
+	tagPlain:            lipgloss.NewStyle(),
+	tagNameRef:          lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
+	tagArg:              lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
+	tagVariable:         lipgloss.NewStyle().Foreground(lipgloss.Color("13")),
+	tagPath:             lipgloss.NewStyle().Foreground(lipgloss.Color("14")),
+	tagSubsectionHeader: lipgloss.NewStyle().Bold(true).BorderStyle(lipgloss.NormalBorder()),
+	tagSymbolic:         lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
+	tagStandard:         lipgloss.NewStyle().Foreground(lipgloss.Color("12")),
+	tagBold:             lipgloss.NewStyle().Bold(true),
+	tagItalic:           lipgloss.NewStyle().Italic(true),
+}
+
 type textSpan struct {
 	typ  textTag
 	text string
 }
 
 func (t textSpan) String() string {
+	if sty, ok := styles[t.typ]; ok {
+		return sty.Render(t.text)
+	}
+
 	switch t.typ {
-	case tagPlain:
-		return fmt.Sprintf("\x1b[0m%s\x1b[0m", t.text)
-	case tagNameRef:
-		return fmt.Sprintf("\x1b[91m%s\x1b[0m", t.text)
-	case tagArg:
-		return fmt.Sprintf("\x1b[93m%s\x1b[0m", t.text)
 	case tagEnvVar:
 		return fmt.Sprintf("$%s", t.text)
 	case tagNoSpace:
 		return ""
-	case tagVariable:
-		return fmt.Sprintf("\x1b[95m%s\x1b[0m", t.text)
-	case tagPath:
-		return fmt.Sprintf("\x1b[96m%s\x1b[0m", t.text)
-	case tagSubsectionHeader:
-		return fmt.Sprintf("\n\n\x1b[1m%s\x1b[0m\n======================\n", t.text)
 	case tagLiteral:
 		return t.text
-	case tagSymbolic:
-		return fmt.Sprintf("\x1b[91m%s\x1b[0m", t.text)
-	case tagStandard:
-		return fmt.Sprintf("\x1b[94m%s\x1b[0m", t.text)
 	case tagParens:
 		return fmt.Sprintf("(%s)", t.text)
-	case tagBold:
-		return fmt.Sprintf("\x1b[1m%s\x1b[0m", t.text)
-	case tagItalic:
-		return fmt.Sprintf("\x1b[3m%s\x1b[0m", t.text)
 	default:
 		panic("unknown text tag")
 	}
@@ -317,7 +315,6 @@ func parseMdoc(doc string) manPage {
 	}
 
 	for _, line := range strings.Split(doc, "\n") {
-		fmt.Printf("👀 %s\n", line)
 		switch {
 
 		case strings.HasPrefix(line, ".\\\"") || strings.HasPrefix(line, "'\\\""): // commenr
