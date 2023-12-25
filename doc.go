@@ -69,16 +69,20 @@ const (
 )
 
 var styles = map[textTag]lipgloss.Style{
-	tagPlain:            lipgloss.NewStyle(),
-	tagNameRef:          lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
-	tagArg:              lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
-	tagVariable:         lipgloss.NewStyle().Foreground(lipgloss.Color("13")),
-	tagPath:             lipgloss.NewStyle().Foreground(lipgloss.Color("14")),
-	tagSubsectionHeader: lipgloss.NewStyle().Bold(true).BorderStyle(lipgloss.NormalBorder()),
-	tagSymbolic:         lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
-	tagStandard:         lipgloss.NewStyle().Foreground(lipgloss.Color("12")),
-	tagBold:             lipgloss.NewStyle().Bold(true),
-	tagItalic:           lipgloss.NewStyle().Italic(true),
+	tagPlain:    lipgloss.NewStyle(),
+	tagNameRef:  lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
+	tagArg:      lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
+	tagVariable: lipgloss.NewStyle().Foreground(lipgloss.Color("13")),
+	tagPath:     lipgloss.NewStyle().Foreground(lipgloss.Color("14")),
+	tagSubsectionHeader: lipgloss.NewStyle().
+		Bold(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderBottom(true).
+		Margin(1),
+	tagSymbolic: lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
+	tagStandard: lipgloss.NewStyle().Foreground(lipgloss.Color("12")),
+	tagBold:     lipgloss.NewStyle().Bold(true),
+	tagItalic:   lipgloss.NewStyle().Italic(true),
 }
 
 type textSpan struct {

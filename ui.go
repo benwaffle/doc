@@ -36,7 +36,8 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
-		cmd tea.Cmd
+		cmd  tea.Cmd
+		cmds []tea.Cmd
 	)
 
 	switch msg := msg.(type) {
@@ -58,6 +59,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// here.
 			m.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
 			m.viewport.YPosition = headerHeight
+			m.viewport.HighPerformanceRendering = true
 			m.viewport.SetContent(m.page.String())
 			m.ready = true
 
@@ -70,12 +72,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.Width = msg.Width
 			m.viewport.Height = msg.Height - verticalMarginHeight
 		}
+
+		cmds = append(cmds, viewport.Sync(m.viewport))
+
 	}
 
 	// Handle keyboard and mouse events in the viewport
 	m.viewport, cmd = m.viewport.Update(msg)
+	cmds = append(cmds, cmd)
 
-	return m, cmd
+	return m, tea.Batch(cmds...)
 }
 
 func (m model) View() string {
