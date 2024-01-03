@@ -54,7 +54,7 @@ func (navItemDelegate) Render(w io.Writer, m listview.Model, index int, listItem
 		return
 	}
 
-	str := fmt.Sprintf("%d. %s", index+1, i)
+	str := fmt.Sprintf("%s", i)
 
 	if index == m.Index() {
 		fmt.Fprint(w, selectedItemStyle.Render(str))
@@ -69,19 +69,20 @@ func NewModel(page manPage) *model {
 	}
 	var sections []listview.Item
 	maxWidth := 0
-	for _, section := range m.page.sections {
-		sections = append(sections, navItem(section.name))
-		maxWidth = max(maxWidth, lipgloss.Width(section.name))
+	for _, section := range m.page.Sections {
+		sections = append(sections, navItem(section.Name))
+		maxWidth = max(maxWidth, lipgloss.Width(section.Name))
 	}
 	m.sections = listview.New(sections, navItemDelegate{}, maxWidth, 100)
 	m.sections.SetShowStatusBar(false)
 	m.sections.SetShowFilter(false)
+	m.sections.SetShowTitle(false)
+	m.sections.SetShowHelp(false)
 
 	return m
 }
 
 func (m model) Init() tea.Cmd {
-
 	// Just return `nil`, which means "no I/O right now, please."
 	return nil
 }
@@ -149,16 +150,23 @@ func (m model) View() string {
 }
 
 func (m model) headerView() string {
-	name := titleStyle.Render(m.page.name)
-	section := titleStyle.Render(fmt.Sprintf("Section %d", m.page.section))
-	date := titleStyle.Render(m.page.date)
+	name := titleStyle.Render(m.page.Name)
+	section := titleStyle.Render(fmt.Sprintf("Section %d", m.page.Section))
+	date := titleStyle.Render(m.page.Date)
 
 	line := strings.Repeat("─", max(0, m.windowWidth-lipgloss.Width(name)-lipgloss.Width(section)-lipgloss.Width(date)-2))
 	return lipgloss.JoinHorizontal(lipgloss.Center, name, "─", section, "─", date, line)
 }
 
+var border = lipgloss.NewStyle().
+	BorderStyle(lipgloss.NormalBorder()).
+	BorderRight(true).
+	PaddingLeft(1).
+	PaddingRight(1).
+	MarginRight(1)
+
 func (m model) sidebarView() string {
-	return m.sections.View()
+	return border.Render(m.sections.View())
 }
 
 func (m model) mainView() string {

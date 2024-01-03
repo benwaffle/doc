@@ -17,35 +17,39 @@ import (
 )
 
 type manPage struct {
-	name     string
-	section  int
-	date     string
-	sections []section
-	extra    string
+	Name     string
+	Section  int
+	Date     string
+	Sections []section
+	Extra    string
 }
 
 func (m manPage) String() string {
-	res := fmt.Sprintf("-----\nname: %s\nsection: %d\ndate: %s\n-----\n", m.name, m.section, m.date)
-	for _, section := range m.sections {
+	res := fmt.Sprintf("-----\nname: %s\nsection: %d\ndate: %s\n-----\n", m.Name, m.Section, m.Date)
+	for _, section := range m.Sections {
 		res += fmt.Sprintf("%+v\n", section)
 	}
 	return res
 }
 
+type Span interface {
+	Render() string
+}
+
 type section struct {
-	name     string
-	contents []any
+	Name     string
+	Contents []Span
 }
 
 func (s section) String() string {
 	if false {
-		res := "# " + s.name + "\n"
-		for i, span := range s.contents {
+		res := "# " + s.Name + "\n"
+		for i, span := range s.Contents {
 			res += fmt.Sprintf("\t%d %+v\n", i, span)
 		}
 		return res
 	} else {
-		return fmt.Sprintf("# %s\n%+v\n", s.name, s.contents)
+		return fmt.Sprintf("# %s\n%+v\n", s.Name, s.Contents)
 	}
 }
 
@@ -86,80 +90,85 @@ var styles = map[textTag]lipgloss.Style{
 }
 
 type textSpan struct {
-	typ  textTag
-	text string
+	Typ  textTag
+	Text string
 }
 
-func (t textSpan) String() string {
-	if sty, ok := styles[t.typ]; ok {
-		return sty.Render(t.text)
+func (t textSpan) Render() string {
+	if sty, ok := styles[t.Typ]; ok {
+		return sty.Render(t.Text)
 	}
 
-	switch t.typ {
+	switch t.Typ {
 	case tagEnvVar:
-		return fmt.Sprintf("$%s", t.text)
+		return fmt.Sprintf("$%s", t.Text)
 	case tagNoSpace:
 		return ""
 	case tagLiteral:
-		return t.text
+		return t.Text
 	case tagParens:
-		return fmt.Sprintf("(%s)", t.text)
+		return fmt.Sprintf("(%s)", t.Text)
 	default:
 		panic("unknown text tag")
 	}
 }
 
 type flagSpan struct {
-	flag string
-	dash bool
+	Flag string
+	Dash bool
 }
 
 var flagStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
 
-func (f flagSpan) String() string {
+func (f flagSpan) Render() string {
 	dash := ""
-	if f.dash {
+	if f.Dash {
 		dash = "-"
 	}
-	return flagStyle.Render(dash + f.flag)
+	return flagStyle.Render(dash + f.Flag)
 }
 
 type manRef struct {
-	name    string
-	section *int
+	Name    string
+	Section *int
 }
 
-func (m manRef) String() string {
-	res := m.name
-	if m.section != nil {
-		res += fmt.Sprintf("(%d)", *m.section)
+func (m manRef) Render() string {
+	res := m.Name
+	if m.Section != nil {
+		res += fmt.Sprintf("(%d)", *m.Section)
 	}
 	return res
 }
 
 type optional struct {
-	contents []any
+	Contents []Span
 }
 
-func (o optional) String() string {
-	return fmt.Sprintf("[%+v]", o.contents)
+func (o optional) Render() string {
+	res := "["
+	for _, span := range o.Contents {
+		res += span.Render()
+	}
+	res += "]"
+	return res
 }
 
 type list struct {
-	items []listItem
+	Items []listItem
 }
 
-func (l list) String() string {
+func (l list) Render() string {
 	res := ""
-	for i, item := range l.items {
-		res += fmt.Sprintf("\n%d\t%+v\t%+v", i, item.tag, item.contents)
+	for i, item := range l.Items {
+		res += fmt.Sprintf("\n%d\ttag[%+v]\tcontents[%+v]", i, item.Tag, item.Contents)
 	}
 	return res
 }
 
 type listItem struct {
-	tag      []any
-	contents []any
+	Tag      []Span
+	Contents []Span
 }
 
 func nextToken(input string) (string, string) {
@@ -170,12 +179,12 @@ func nextToken(input string) (string, string) {
 	return input[:loc], input[loc+1:]
 }
 
-func parseLine(line string) []any {
+func parseLine(line string) []Span {
 	if line == "" {
 		return nil
 	}
 
-	var res []any
+	var res []Span
 	lastMacro := ""
 
 tokenizer:
@@ -309,11 +318,11 @@ func parseMdoc(doc string) manPage {
 	currentList := list{}
 	var currentListItem *listItem
 
-	addSpans := func(spans ...any) {
+	addSpans := func(spans ...Span) {
 		if currentListItem != nil {
-			currentListItem.contents = append(currentListItem.contents, spans...)
+			currentListItem.Contents = append(currentListItem.Contents, spans...)
 		} else if currentSection != nil {
-			currentSection.contents = append(currentSection.contents, spans...)
+			currentSection.Contents = append(currentSection.Contents, spans...)
 		} else {
 			panic("no current section")
 		}
@@ -326,35 +335,35 @@ func parseMdoc(doc string) manPage {
 			// ignore
 
 		case strings.HasPrefix(line, ".Dd"): // document date
-			page.date = line[4:]
+			page.Date = line[4:]
 
 		case mdocTitle.MatchString(line): // mdoc page title
 			parts := mdocTitle.FindStringSubmatch(line)
-			page.name = parts[1]
+			page.Name = parts[1]
 			section, err := strconv.Atoi(parts[2])
 			if err != nil {
 				panic(err)
 			}
-			page.section = section
+			page.Section = section
 
 		case strings.HasPrefix(line, ".TH"): // man page title
 			parts := strings.Split(line[4:], " ")
-			page.name = parts[0]
+			page.Name = parts[0]
 			section, err := strconv.Atoi(parts[1])
 			if err != nil {
 				panic(err)
 			}
-			page.section = section
-			page.date = parts[2]
-			page.extra = parts[3] + " " + parts[4]
+			page.Section = section
+			page.Date = parts[2]
+			page.Extra = parts[3] + " " + parts[4]
 
 		case strings.HasPrefix(line, ".Sh") || strings.HasPrefix(line, ".SH"): // section header
 			if currentSection != nil {
-				page.sections = append(page.sections, *currentSection)
+				page.Sections = append(page.Sections, *currentSection)
 			}
 
 			currentSection = &section{
-				name: line[4:],
+				Name: line[4:],
 			}
 
 		case nameFull.MatchString(line): // .Nm - page name
@@ -366,7 +375,7 @@ func parseMdoc(doc string) manPage {
 			addSpans(textSpan{tagNameRef, name})
 			if len(parts) > 2 {
 				// TODO: i think this adds blank spans
-				addSpans(textSpan{text: parts[2]})
+				addSpans(textSpan{Text: parts[2]})
 			}
 
 		case line == ".Nm": // .Nm - page name
@@ -377,10 +386,10 @@ func parseMdoc(doc string) manPage {
 			addSpans(textSpan{tagNameRef, savedName})
 
 		case strings.HasPrefix(line, ".Nd"): // page description
-			addSpans(textSpan{text: line[4:]})
+			addSpans(textSpan{Text: line[4:]})
 
 		case strings.HasPrefix(line, ".In"): // #include
-			addSpans(textSpan{text: fmt.Sprintf("#include <%s>", line[4:])})
+			addSpans(textSpan{Text: fmt.Sprintf("#include <%s>", line[4:])})
 
 		case xr.MatchString(line): // man reference
 			parts := xr.FindStringSubmatchIndex(line)
@@ -438,20 +447,20 @@ func parseMdoc(doc string) manPage {
 
 		case strings.HasPrefix(line, ".It"): // list item
 			if currentListItem != nil {
-				currentList.items = append(currentList.items, *currentListItem)
+				currentList.Items = append(currentList.Items, *currentListItem)
 			}
 
 			currentListItem = &listItem{}
 			if len(line) > 4 {
-				currentListItem.tag = append(currentListItem.contents, parseLine(line[4:])...)
+				currentListItem.Tag = append(currentListItem.Contents, parseLine(line[4:])...)
 			}
 
 		case strings.HasPrefix(line, ".El"): // end list
 			if currentListItem != nil {
-				currentList.items = append(currentList.items, *currentListItem)
+				currentList.Items = append(currentList.Items, *currentListItem)
 				currentListItem = nil
 			}
-			currentSection.contents = append(currentSection.contents, currentList)
+			currentSection.Contents = append(currentSection.Contents, currentList)
 
 		case strings.HasPrefix(line, ".Os"): // OS
 			// TODO: do we need this?
@@ -473,7 +482,7 @@ func parseMdoc(doc string) manPage {
 
 		}
 	}
-	page.sections = append(page.sections, *currentSection)
+	page.Sections = append(page.Sections, *currentSection)
 	return page
 }
 
