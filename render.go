@@ -20,7 +20,6 @@ func (page manPage) render() string {
 		res += fmt.Sprintf("%s\n", sectionHeader.Render(section.Name))
 		for _, content := range section.Contents {
 			res += content.Render()
-			res += " "
 		}
 	}
 	return res

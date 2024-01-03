@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -60,7 +61,6 @@ const (
 	tagNameRef
 	tagArg
 	tagEnvVar
-	tagNoSpace
 	tagVariable
 	tagPath
 	tagSubsectionHeader
@@ -87,35 +87,35 @@ var styles = map[textTag]lipgloss.Style{
 	tagStandard: lipgloss.NewStyle().Foreground(lipgloss.Color("12")),
 	tagBold:     lipgloss.NewStyle().Bold(true),
 	tagItalic:   lipgloss.NewStyle().Italic(true),
+	tagLiteral:  lipgloss.NewStyle(),
 }
 
 type textSpan struct {
-	Typ  textTag
-	Text string
+	Typ     textTag
+	Text    string
+	NoSpace bool // Set to false by default
 }
 
 func (t textSpan) Render() string {
-	if sty, ok := styles[t.Typ]; ok {
-		return sty.Render(t.Text)
-	}
-
+	var res string
 	switch t.Typ {
 	case tagEnvVar:
-		return fmt.Sprintf("$%s", t.Text)
-	case tagNoSpace:
-		return ""
-	case tagLiteral:
-		return t.Text
+		res = fmt.Sprintf("$%s", t.Text)
 	case tagParens:
-		return fmt.Sprintf("(%s)", t.Text)
+		res = fmt.Sprintf("(%s)", t.Text)
 	default:
-		panic("unknown text tag")
+		res = styles[t.Typ].Render(t.Text)
 	}
+	if !t.NoSpace {
+		res += " "
+	}
+	return res
 }
 
 type flagSpan struct {
-	Flag string
-	Dash bool
+	Flag    string
+	Dash    bool
+	NoSpace bool // Set to false by default
 }
 
 var flagStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
@@ -125,7 +125,11 @@ func (f flagSpan) Render() string {
 	if f.Dash {
 		dash = "-"
 	}
-	return flagStyle.Render(dash + f.Flag)
+	res := flagStyle.Render(dash + f.Flag)
+	if !f.NoSpace {
+		res += " "
+	}
+	return res
 }
 
 type manRef struct {
@@ -142,7 +146,7 @@ func (m manRef) Render() string {
 }
 
 type optional struct {
-	Contents []Span
+	Contents []Span `json:"optionalContents"`
 }
 
 func (o optional) Render() string {
@@ -150,7 +154,8 @@ func (o optional) Render() string {
 	for _, span := range o.Contents {
 		res += span.Render()
 	}
-	res += "]"
+	res = strings.TrimSuffix(res, " ")
+	res += "] "
 	return res
 }
 
@@ -194,68 +199,68 @@ tokenizer:
 		switch token {
 		case "Fl": // command line flag with dash
 			flag, rest := nextToken(rest)
-			res = append(res, flagSpan{flag, true})
+			res = append(res, flagSpan{flag, true, false})
 			line = rest
 			lastMacro = "Fl"
 		case "Cm": // command line something with no dash
 			flag, rest := nextToken(rest)
-			res = append(res, flagSpan{flag, false})
+			res = append(res, flagSpan{flag, false, false})
 			line = rest
 			lastMacro = "Cm"
 		case "Ar": // command line argument
 			arg, rest := nextToken(rest)
-			res = append(res, textSpan{tagArg, arg})
+			res = append(res, textSpan{tagArg, arg, false})
 			line = rest
 			lastMacro = "Ar"
 		case "Ev": // environment variable
 			env, rest := nextToken(rest)
-			res = append(res, textSpan{tagEnvVar, env})
+			res = append(res, textSpan{tagEnvVar, env, false})
 			line = rest
 			lastMacro = "Ev"
 		case "Va": // variable
 			vari, rest := nextToken(rest)
-			res = append(res, textSpan{tagVariable, vari})
+			res = append(res, textSpan{tagVariable, vari, false})
 			line = rest
 			lastMacro = "Va"
 		case "Pa": // path
 			pa, rest := nextToken(rest)
-			res = append(res, textSpan{tagPath, pa})
+			res = append(res, textSpan{tagPath, pa, false})
 			line = rest
 			lastMacro = "Pa"
 		case "Sy": // symbolic
 			sym, rest := nextToken(rest)
-			res = append(res, textSpan{tagSymbolic, sym})
+			res = append(res, textSpan{tagSymbolic, sym, false})
 			line = rest
 			lastMacro = "Sy"
 		case "Li": // literal
 			literal, rest := nextToken(rest)
-			res = append(res, textSpan{tagLiteral, literal})
+			res = append(res, textSpan{tagLiteral, literal, false})
 			line = rest
 			lastMacro = "Li"
 		case "St": // standard
 			standard, rest := nextToken(rest)
-			res = append(res, textSpan{tagStandard, standard})
+			res = append(res, textSpan{tagStandard, standard, false})
 			line = rest
 			lastMacro = "St"
 		case "Pq": // parens
 			parens, rest := nextToken(rest)
-			res = append(res, textSpan{tagParens, parens})
+			res = append(res, textSpan{tagParens, parens, false})
 			line = rest
 			lastMacro = "Pq"
 		case "B": // bold
 			bold, rest := nextToken(rest)
-			res = append(res, textSpan{tagBold, bold})
+			res = append(res, textSpan{tagBold, bold, false})
 			line = rest
 			lastMacro = "B"
 		case "I": // italic
 			italic, rest := nextToken(rest)
-			res = append(res, textSpan{tagItalic, italic})
+			res = append(res, textSpan{tagItalic, italic, false})
 			line = rest
 			lastMacro = "I"
 		case "BR": // alternate bold and normal
 			bold, rest := nextToken(rest)
 			if bold != "" {
-				res = append(res, textSpan{tagBold, bold})
+				res = append(res, textSpan{tagBold, bold, false})
 				line = "RB " + rest
 			} else {
 				line = rest
@@ -264,7 +269,7 @@ tokenizer:
 		case "RB": // alternate normal and bold
 			roman, rest := nextToken(rest)
 			if roman != "" {
-				res = append(res, textSpan{tagPlain, roman})
+				res = append(res, textSpan{tagPlain, roman, false})
 				line = "BR " + rest
 			} else {
 				line = rest
@@ -273,7 +278,7 @@ tokenizer:
 		case "RI": // alternate normal and italic
 			roman, rest := nextToken(rest)
 			if roman != "" {
-				res = append(res, textSpan{tagPlain, roman})
+				res = append(res, textSpan{tagPlain, roman, false})
 				line = "IR " + rest
 			} else {
 				line = rest
@@ -282,20 +287,32 @@ tokenizer:
 		case "IR": // alternate italic and normal
 			italic, rest := nextToken(rest)
 			if italic != "" {
-				res = append(res, textSpan{tagItalic, italic})
+				res = append(res, textSpan{tagItalic, italic, false})
 				line = "RI " + rest
 			} else {
 				line = rest
 			}
 			lastMacro = "IR"
 		case "Ns": // no space
-			res = append(res, textSpan{tagNoSpace, ""})
+			index := len(res) - 1
+			last := res[index]
+			switch span := last.(type) {
+			case textSpan:
+				span.NoSpace = true
+				res[index] = span
+			case flagSpan:
+				span.NoSpace = true
+				res[index] = span
+			default:
+				fmt.Printf("%+v\n", res)
+				panic("Don't know how to handle Ns macro")
+			}
 			line = rest
 		case "Op": // optional
 			res = append(res, optional{parseLine(rest)})
 			break tokenizer
 		case ",", "|":
-			res = append(res, textSpan{tagPlain, token})
+			res = append(res, textSpan{tagPlain, token, false})
 			line = rest
 			repeatMacro = true
 		case "":
@@ -305,7 +322,7 @@ tokenizer:
 				line = lastMacro + " " + line
 				repeatMacro = false
 			} else {
-				res = append(res, textSpan{tagPlain, token})
+				res = append(res, textSpan{tagPlain, token, false})
 				line = rest
 			}
 		}
@@ -379,7 +396,7 @@ func parseMdoc(doc string) manPage {
 			if savedName == "" { // first invocation, save the name
 				savedName = name
 			}
-			addSpans(textSpan{tagNameRef, name})
+			addSpans(textSpan{tagNameRef, name, false})
 			if len(parts) > 2 && parts[2] != "" {
 				addSpans(textSpan{Text: parts[2]})
 			}
@@ -389,7 +406,7 @@ func parseMdoc(doc string) manPage {
 				name := line[4:]
 				savedName = name
 			}
-			addSpans(textSpan{tagNameRef, savedName})
+			addSpans(textSpan{tagNameRef, savedName, false})
 
 		case strings.HasPrefix(line, ".Nd"): // page description
 			addSpans(textSpan{Text: line[4:]})
@@ -412,10 +429,10 @@ func parseMdoc(doc string) manPage {
 			addSpans(manRef{name, section})
 
 		case strings.HasPrefix(line, ".Ss") || strings.HasPrefix(line, ".SS"): // subsection header
-			addSpans(textSpan{tagSubsectionHeader, line[4:]})
+			addSpans(textSpan{tagSubsectionHeader, line[4:], false})
 
 		case strings.HasPrefix(line, ".Dl"): // indented literal
-			addSpans(textSpan{tagPlain, "\t"})
+			addSpans(textSpan{tagPlain, "\t", false})
 			addSpans(parseLine(line[4:])...)
 
 		case strings.HasPrefix(line, ".IP"): // indented paragraph
@@ -439,10 +456,10 @@ func parseMdoc(doc string) manPage {
 				indent = indentVal
 			}
 
-			addSpans(textSpan{tagPlain, "\n" + strings.Repeat("  ", indent) + tag})
+			addSpans(textSpan{tagPlain, "\n" + strings.Repeat("  ", indent) + tag, false})
 
 		case strings.HasPrefix(line, ".TP"):
-			addSpans(textSpan{tagPlain, "\n"})
+			addSpans(textSpan{tagPlain, "\n", false})
 
 		case strings.HasPrefix(line, ".ft"): // font
 			// not supported
@@ -472,10 +489,10 @@ func parseMdoc(doc string) manPage {
 			// TODO: do we need this?
 
 		case line == ".Pp" || line == ".PP":
-			addSpans(textSpan{tagPlain, "\n\n"})
+			addSpans(textSpan{tagPlain, "\n\n", false})
 
 		case line == ".br":
-			addSpans(textSpan{tagPlain, "\n"})
+			addSpans(textSpan{tagPlain, "\n", false})
 
 		case line == "." || line == "":
 			// ignore
@@ -544,6 +561,14 @@ func readManPage(path string) (string, error) {
 	return string(data), nil
 }
 
+func dumpAst(page manPage) {
+	bytes, err := json.Marshal(page)
+	if err != nil {
+		panic(err)
+	}
+	os.WriteFile("ast.json", bytes, 0666)
+}
+
 func main() {
 	if len(os.Args) != 2 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <command>\n", os.Args[0])
@@ -571,6 +596,8 @@ func main() {
 	}
 
 	page := parseMdoc(data)
+
+	dumpAst(page)
 
 	p := tea.NewProgram(
 		NewModel(page),
