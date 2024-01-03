@@ -186,6 +186,7 @@ func parseLine(line string) []Span {
 
 	var res []Span
 	lastMacro := ""
+	repeatMacro := false
 
 tokenizer:
 	for {
@@ -295,12 +296,18 @@ tokenizer:
 			break tokenizer
 		case ",", "|":
 			res = append(res, textSpan{tagPlain, token})
-			line = lastMacro + " " + rest
+			line = rest
+			repeatMacro = true
 		case "":
 			break tokenizer
 		default:
-			res = append(res, textSpan{tagPlain, token})
-			line = rest
+			if repeatMacro {
+				line = lastMacro + " " + line
+				repeatMacro = false
+			} else {
+				res = append(res, textSpan{tagPlain, token})
+				line = rest
+			}
 		}
 	}
 
