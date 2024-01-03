@@ -373,8 +373,7 @@ func parseMdoc(doc string) manPage {
 				savedName = name
 			}
 			addSpans(textSpan{tagNameRef, name})
-			if len(parts) > 2 {
-				// TODO: i think this adds blank spans
+			if len(parts) > 2 && parts[2] != "" {
 				addSpans(textSpan{Text: parts[2]})
 			}
 
