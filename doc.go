@@ -209,6 +209,9 @@ tokenizer:
 			lastMacro = "Cm"
 		case "Ar": // command line argument
 			arg, rest := nextToken(rest)
+			if arg == "" {
+				arg = "file ..."
+			}
 			res = append(res, textSpan{tagArg, arg, false})
 			line = rest
 			lastMacro = "Ar"

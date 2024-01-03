@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/reflow/wordwrap"
 )
 
 type model struct {
@@ -117,7 +118,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport = viewport.New(m.windowWidth-navWidth, m.windowHeight-verticalMarginHeight)
 			// m.viewport.YPosition = headerHeight
 			// m.viewport.HighPerformanceRendering = true
-			m.viewport.SetContent(m.page.render())
+			m.viewport.SetContent(wordwrap.String(m.page.render(), m.windowWidth-navWidth))
 
 			m.ready = true
 			// This is only necessary for high performance rendering, which in
@@ -136,10 +137,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	}
 
-	m.sections, cmd = m.sections.Update(msg)
+	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
 
-	m.viewport, cmd = m.viewport.Update(msg)
+	m.sections, cmd = m.sections.Update(msg)
 	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
