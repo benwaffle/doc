@@ -127,13 +127,15 @@ const (
 	decorationParens
 	decorationSingleQuote
 	decorationDoubleQuote
+	decorationQuotedLiteral
 )
 
 var decorationStyles = map[decorationTag][]string{
-	decorationOptional:    {"[", "]"},
-	decorationParens:      {"(", ")"},
-	decorationSingleQuote: {"'", "'"},
-	decorationDoubleQuote: {"\"", "\""},
+	decorationOptional:      {"[", "]"},
+	decorationParens:        {"(", ")"},
+	decorationSingleQuote:   {"'", "'"},
+	decorationDoubleQuote:   {"\"", "\""},
+	decorationQuotedLiteral: {"‘", "’"},
 }
 
 type decoratedSpan struct {
@@ -365,6 +367,9 @@ tokenizer:
 				panic("Don't know how to handle Ns macro")
 			}
 			line = rest
+		case "Ql": // quoted literal
+			res = append(res, decoratedSpan{decorationQuotedLiteral, parseLine(rest)})
+			break tokenizer
 		case "Pq": // parens
 			res = append(res, decoratedSpan{decorationParens, parseLine(rest)})
 			break tokenizer
