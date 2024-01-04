@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	listview "github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,8 +19,85 @@ type model struct {
 	ready        bool
 	viewport     viewport.Model
 	navigation   listview.Model
+	help         help.Model
+	keys         keyMap
 	windowWidth  int
 	windowHeight int
+}
+
+type keyMap struct {
+	PageDown     key.Binding
+	PageUp       key.Binding
+	HalfPageUp   key.Binding
+	HalfPageDown key.Binding
+	Down         key.Binding
+	Up           key.Binding
+	Help         key.Binding
+	Quit         key.Binding
+}
+
+func defaultKeyMap() keyMap {
+	return keyMap{
+		PageDown: key.NewBinding(
+			key.WithKeys("pgdown", " ", "f"),
+			key.WithHelp("f/pgdn", "page down"),
+		),
+		PageUp: key.NewBinding(
+			key.WithKeys("pgup", "b"),
+			key.WithHelp("b/pgup", "page up"),
+		),
+		HalfPageUp: key.NewBinding(
+			key.WithKeys("u", "ctrl+u"),
+			key.WithHelp("u", "½ page up"),
+		),
+		HalfPageDown: key.NewBinding(
+			key.WithKeys("d", "ctrl+d"),
+			key.WithHelp("d", "½ page down"),
+		),
+		Up: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑/k", "up"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓/j", "down"),
+		),
+		Help: key.NewBinding(
+			key.WithKeys("?"),
+			key.WithHelp("?", "toggle help"),
+		),
+		Quit: key.NewBinding(
+			key.WithKeys("q", "esc", "ctrl+c"),
+			key.WithHelp("q", "quit"),
+		),
+	}
+}
+
+func (k keyMap) ShortHelp() []key.Binding {
+	return []key.Binding{
+		k.Down,
+		k.Up,
+		k.Help,
+		k.Quit,
+	}
+}
+
+func (k keyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{
+			k.PageDown,
+			k.PageUp,
+		}, {
+			k.HalfPageUp,
+			k.HalfPageDown,
+		}, {
+			k.Down,
+			k.Up,
+		}, {
+			k.Help,
+			k.Quit,
+		},
+	}
 }
 
 var (
@@ -67,6 +146,8 @@ func (navItemDelegate) Render(w io.Writer, m listview.Model, index int, listItem
 func NewModel(page manPage) *model {
 	m := &model{
 		page: page,
+		help: help.New(),
+		keys: defaultKeyMap(),
 	}
 
 	var sections []listview.Item
@@ -107,10 +188,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q", "esc":
+		switch {
+		case key.Matches(msg, m.keys.PageDown):
+			m.viewport.ViewDown()
+		case key.Matches(msg, m.keys.PageUp):
+			m.viewport.ViewUp()
+		case key.Matches(msg, m.keys.HalfPageDown):
+			m.viewport.HalfViewDown()
+		case key.Matches(msg, m.keys.HalfPageUp):
+			m.viewport.HalfViewUp()
+		case key.Matches(msg, m.keys.Down):
+			m.viewport.LineDown(1)
+		case key.Matches(msg, m.keys.Up):
+			m.viewport.LineUp(1)
+		case key.Matches(msg, m.keys.Help):
+			m.help.ShowAll = !m.help.ShowAll
+		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
-			// case "j", "down":
 		}
 
 	case tea.WindowSizeMsg:
@@ -119,8 +213,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		headerHeight := lipgloss.Height(m.headerView())
 		footerHeight := lipgloss.Height(m.footerView())
+		helpHeight := lipgloss.Height(m.helpView())
 		navWidth := lipgloss.Width(m.sidebarView())
-		verticalMarginHeight := headerHeight + footerHeight
+		verticalMarginHeight := headerHeight + footerHeight + helpHeight
 		contentWidth := m.windowWidth - navWidth
 
 		if !m.ready {
@@ -146,6 +241,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.navigation.SetHeight(msg.Height - verticalMarginHeight)
+		m.help.Width = msg.Width
 
 		// cmds = append(cmds, viewport.Sync(m.viewport))
 
@@ -161,7 +257,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	return m.headerView() + "\n" + m.mainView() + "\n" + m.footerView()
+	return m.headerView() + "\n" + m.mainView() + "\n" + m.footerView() + "\n" + m.helpView()
 }
 
 func (m model) headerView() string {
@@ -169,6 +265,7 @@ func (m model) headerView() string {
 	section := titleStyle.Render(fmt.Sprintf("Section %d", m.page.Section))
 	date := titleStyle.Render(m.page.Date)
 
+	// 🤮
 	line := strings.Repeat("─", max(0, m.windowWidth-lipgloss.Width(name)-lipgloss.Width(section)-lipgloss.Width(date)-2))
 	return lipgloss.JoinHorizontal(lipgloss.Center, name, "─", section, "─", date, line)
 }
@@ -192,4 +289,8 @@ func (m model) footerView() string {
 	info := infoStyle.Render(fmt.Sprintf("%3.f%%", m.viewport.ScrollPercent()*100))
 	line := strings.Repeat("─", max(0, m.windowWidth-lipgloss.Width(info)))
 	return lipgloss.JoinHorizontal(lipgloss.Center, line, info)
+}
+
+func (m model) helpView() string {
+	return m.help.View(m.keys)
 }
