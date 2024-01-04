@@ -80,9 +80,7 @@ var styles = map[textTag]lipgloss.Style{
 	tagPath:     lipgloss.NewStyle().Foreground(lipgloss.Color("14")),
 	tagSubsectionHeader: lipgloss.NewStyle().
 		Bold(true).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderBottom(true).
-		Margin(1),
+		Margin(2, 0, 0, 0),
 	tagSymbolic: lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
 	tagStandard: lipgloss.NewStyle().Foreground(lipgloss.Color("12")),
 	tagBold:     lipgloss.NewStyle().Bold(true),
@@ -105,6 +103,8 @@ func (t textSpan) Render(_ int) string {
 		res = fmt.Sprintf("$%s", t.Text)
 	case tagDoubleQuote:
 		res = fmt.Sprintf("\"%s\"", t.Text)
+	case tagSubsectionHeader:
+		res = styles[tagSubsectionHeader].Render(t.Text) + "\n"
 	default:
 		res = styles[t.Typ].Render(t.Text)
 	}
@@ -266,7 +266,7 @@ tokenizer:
 			res = append(res, textSpan{tagEnvVar, env, false})
 			line = rest
 			lastMacro = "Ev"
-		case "Va": // variable
+		case "Va", "Dv": // variable
 			vari, rest := nextToken(rest)
 			res = append(res, textSpan{tagVariable, vari, false})
 			line = rest
@@ -492,7 +492,7 @@ func parseMdoc(doc string) manPage {
 			addSpans(manRef{name, section})
 
 		case strings.HasPrefix(line, ".Ss") || strings.HasPrefix(line, ".SS"): // subsection header
-			addSpans(textSpan{tagSubsectionHeader, line[4:], false})
+			addSpans(textSpan{tagSubsectionHeader, line[4:], true})
 
 		case strings.HasPrefix(line, ".Dl"): // indented literal
 			addSpans(textSpan{tagPlain, "\t", false})

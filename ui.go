@@ -40,7 +40,7 @@ var selectedItemStyle = itemStyle.Copy().Foreground(lipgloss.Color("#ae00ff"))
 
 type navItem string
 
-func (n navItem) FilterValue() string { return "" }
+func (n navItem) FilterValue() string { return string(n) }
 
 type navItemDelegate struct{}
 
@@ -68,13 +68,24 @@ func NewModel(page manPage) *model {
 	m := &model{
 		page: page,
 	}
+
 	var sections []listview.Item
-	maxWidth := 0
 	for _, section := range m.page.Sections {
 		sections = append(sections, navItem(section.Name))
-		maxWidth = max(maxWidth, lipgloss.Width(section.Name))
+
+		for _, content := range section.Contents {
+			if span, ok := content.(textSpan); ok && span.Typ == tagSubsectionHeader {
+				text := strings.TrimSuffix(span.Text, ":")
+				sections = append(sections, navItem("  "+text))
+			}
+		}
+	}
+	maxWidth := 0
+	for _, item := range sections {
+		maxWidth = max(maxWidth, lipgloss.Width(string(item.(navItem))))
 	}
 	m.sections = listview.New(sections, navItemDelegate{}, maxWidth, 100)
+
 	m.sections.SetShowStatusBar(false)
 	m.sections.SetShowFilter(false)
 	m.sections.SetShowTitle(false)
