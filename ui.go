@@ -16,7 +16,7 @@ type model struct {
 	page         manPage
 	ready        bool
 	viewport     viewport.Model
-	sections     listview.Model
+	navigation   listview.Model
 	windowWidth  int
 	windowHeight int
 }
@@ -84,12 +84,12 @@ func NewModel(page manPage) *model {
 	for _, item := range sections {
 		maxWidth = max(maxWidth, lipgloss.Width(string(item.(navItem))))
 	}
-	m.sections = listview.New(sections, navItemDelegate{}, maxWidth, 100)
+	m.navigation = listview.New(sections, navItemDelegate{}, maxWidth, 100)
 
-	m.sections.SetShowStatusBar(false)
-	m.sections.SetShowFilter(false)
-	m.sections.SetShowTitle(false)
-	m.sections.SetShowHelp(false)
+	m.navigation.SetShowStatusBar(false)
+	m.navigation.SetShowFilter(false)
+	m.navigation.SetShowTitle(false)
+	m.navigation.SetShowHelp(false)
 
 	return m
 }
@@ -107,8 +107,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if k := msg.String(); k == "ctrl+c" || k == "q" || k == "esc" {
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
 			return m, tea.Quit
+			// case "j", "down":
 		}
 
 	case tea.WindowSizeMsg:
@@ -143,17 +145,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.Height = msg.Height - verticalMarginHeight
 		}
 
-		m.sections.SetHeight(msg.Height - verticalMarginHeight)
+		m.navigation.SetHeight(msg.Height - verticalMarginHeight)
 
 		// cmds = append(cmds, viewport.Sync(m.viewport))
 
+	default:
+		m.viewport, cmd = m.viewport.Update(msg)
+		cmds = append(cmds, cmd)
+
+		m.navigation, cmd = m.navigation.Update(msg)
+		cmds = append(cmds, cmd)
 	}
-
-	m.viewport, cmd = m.viewport.Update(msg)
-	cmds = append(cmds, cmd)
-
-	m.sections, cmd = m.sections.Update(msg)
-	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
 }
@@ -179,7 +181,7 @@ var border = lipgloss.NewStyle().
 	MarginRight(1)
 
 func (m model) sidebarView() string {
-	return border.Render(m.sections.View())
+	return border.Render(m.navigation.View())
 }
 
 func (m model) mainView() string {
