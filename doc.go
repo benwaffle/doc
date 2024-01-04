@@ -69,6 +69,7 @@ const (
 	tagStandard
 	tagBold
 	tagItalic
+	tagDoubleQuote
 )
 
 var styles = map[textTag]lipgloss.Style{
@@ -102,6 +103,8 @@ func (t textSpan) Render(_ int) string {
 	switch t.Typ {
 	case tagEnvVar:
 		res = fmt.Sprintf("$%s", t.Text)
+	case tagDoubleQuote:
+		res = fmt.Sprintf("\"%s\"", t.Text)
 	default:
 		res = styles[t.Typ].Render(t.Text)
 	}
@@ -288,6 +291,11 @@ tokenizer:
 			res = append(res, textSpan{tagStandard, standard, false})
 			line = rest
 			lastMacro = "St"
+		case "Dq": // double quote
+			quoted, rest := nextToken(rest)
+			res = append(res, textSpan{tagDoubleQuote, quoted, false})
+			line = rest
+			lastMacro = "Dq"
 		case "B": // bold
 			bold, rest := nextToken(rest)
 			res = append(res, textSpan{tagBold, bold, false})
