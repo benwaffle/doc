@@ -402,12 +402,13 @@ func parseMdoc(doc string) manPage {
 
 	page := manPage{}
 	var currentSection *section
-	currentList := list{}
-	var currentListItem *listItem
+
+	lists := stack[*list]{}
 
 	addSpans := func(spans ...Span) {
-		if currentListItem != nil {
-			currentListItem.Contents = append(currentListItem.Contents, spans...)
+		if lists.Len() > 0 {
+			currentItem := &lists.Peek().Items[len(lists.Peek().Items)-1]
+			currentItem.Contents = append(currentItem.Contents, spans...)
 		} else if currentSection != nil {
 			currentSection.Contents = append(currentSection.Contents, spans...)
 		} else {
@@ -528,24 +529,20 @@ func parseMdoc(doc string) manPage {
 
 		case strings.HasPrefix(line, ".Bl"): // begin list
 			// TODO: parse list options
-			currentList = list{Compact: strings.Contains(line, "-compact")}
+			lists.Push(&list{
+				Compact: strings.Contains(line, "-compact"),
+			})
 
 		case strings.HasPrefix(line, ".It"): // list item
-			if currentListItem != nil {
-				currentList.Items = append(currentList.Items, *currentListItem)
-			}
-
-			currentListItem = &listItem{}
+			nextItem := listItem{}
 			if len(line) > 4 {
-				currentListItem.Tag = append(currentListItem.Contents, parseLine(line[4:])...)
+				nextItem.Tag = parseLine(line[4:])
 			}
+			lists.Peek().Items = append(lists.Peek().Items, nextItem)
 
 		case strings.HasPrefix(line, ".El"): // end list
-			if currentListItem != nil {
-				currentList.Items = append(currentList.Items, *currentListItem)
-				currentListItem = nil
-			}
-			currentSection.Contents = append(currentSection.Contents, currentList)
+			endedList := lists.Pop()
+			addSpans(endedList)
 
 		case strings.HasPrefix(line, ".Os"): // OS
 			// TODO: do we need this?
