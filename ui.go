@@ -101,13 +101,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.WindowSizeMsg:
+		m.windowWidth = msg.Width
+		m.windowHeight = msg.Height
+
 		headerHeight := lipgloss.Height(m.headerView())
 		footerHeight := lipgloss.Height(m.footerView())
 		navWidth := lipgloss.Width(m.sidebarView())
 		verticalMarginHeight := headerHeight + footerHeight
-
-		m.windowWidth = msg.Width
-		m.windowHeight = msg.Height
+		contentWidth := m.windowWidth - navWidth
 
 		if !m.ready {
 			// Since this program is using the full size of the viewport we
@@ -115,10 +116,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// we can initialize the viewport. The initial dimensions come in
 			// quickly, though asynchronously, which is why we wait for them
 			// here.
-			m.viewport = viewport.New(m.windowWidth-navWidth, m.windowHeight-verticalMarginHeight)
+			m.viewport = viewport.New(contentWidth, m.windowHeight-verticalMarginHeight)
 			// m.viewport.YPosition = headerHeight
 			// m.viewport.HighPerformanceRendering = true
-			m.viewport.SetContent(wordwrap.String(m.page.render(), m.windowWidth-navWidth))
+			m.viewport.SetContent(wordwrap.String(m.page.render(contentWidth), m.windowWidth-navWidth))
 
 			m.ready = true
 			// This is only necessary for high performance rendering, which in

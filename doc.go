@@ -34,7 +34,7 @@ func (m manPage) String() string {
 }
 
 type Span interface {
-	Render() string
+	Render(width int) string
 }
 
 type section struct {
@@ -96,7 +96,9 @@ type textSpan struct {
 	NoSpace bool // Set to false by default
 }
 
-func (t textSpan) Render() string {
+var allWhitespace, _ = regexp.Compile(`^\s+$`)
+
+func (t textSpan) Render(_ int) string {
 	var res string
 	switch t.Typ {
 	case tagEnvVar:
@@ -106,7 +108,7 @@ func (t textSpan) Render() string {
 	default:
 		res = styles[t.Typ].Render(t.Text)
 	}
-	if !t.NoSpace {
+	if !t.NoSpace && !allWhitespace.MatchString(t.Text) {
 		res += " "
 	}
 	return res
@@ -120,7 +122,7 @@ type flagSpan struct {
 
 var flagStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
 
-func (f flagSpan) Render() string {
+func (f flagSpan) Render(_ int) string {
 	dash := ""
 	if f.Dash {
 		dash = "-"
@@ -137,7 +139,7 @@ type manRef struct {
 	Section *int
 }
 
-func (m manRef) Render() string {
+func (m manRef) Render(_ int) string {
 	res := m.Name
 	if m.Section != nil {
 		res += fmt.Sprintf("(%d)", *m.Section)
@@ -149,10 +151,10 @@ type optional struct {
 	Contents []Span `json:"optionalContents"`
 }
 
-func (o optional) Render() string {
+func (o optional) Render(width int) string {
 	res := "["
 	for _, span := range o.Contents {
-		res += span.Render()
+		res += span.Render(width)
 	}
 	res = strings.TrimSuffix(res, " ")
 	res += "] "
@@ -163,10 +165,34 @@ type list struct {
 	Items []listItem
 }
 
-func (l list) Render() string {
+func (l list) Render(width int) string {
 	res := ""
-	for i, item := range l.Items {
-		res += fmt.Sprintf("\n%d\ttag[%+v]\tcontents[%+v]", i, item.Tag, item.Contents)
+	maxTagWidth := 8
+	contentStyle := lipgloss.NewStyle().MarginLeft(maxTagWidth).Width(width - maxTagWidth)
+
+	for _, item := range l.Items {
+		res += "\n\n"
+
+		tag := ""
+		for _, span := range item.Tag {
+			tag += span.Render(width)
+		}
+		tag = strings.TrimSpace(tag)
+
+		contents := ""
+		for _, span := range item.Contents {
+			contents += span.Render(width)
+		}
+		contents = contentStyle.Render(contents)
+
+		if lipgloss.Width(tag) > maxTagWidth {
+			res += tag
+			res += "\n"
+			res += contents
+		} else {
+			res += tag
+			res += contents[lipgloss.Width(tag):]
+		}
 	}
 	return res
 }
@@ -412,7 +438,7 @@ func parseMdoc(doc string) manPage {
 			addSpans(textSpan{tagNameRef, savedName, false})
 
 		case strings.HasPrefix(line, ".Nd"): // page description
-			addSpans(textSpan{Text: line[4:]})
+			addSpans(textSpan{Text: "– " + line[4:]})
 
 		case strings.HasPrefix(line, ".In"): // #include
 			addSpans(textSpan{Text: fmt.Sprintf("#include <%s>", line[4:])})
