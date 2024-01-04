@@ -223,11 +223,15 @@ type listItem struct {
 }
 
 func nextToken(input string) (string, string) {
-	loc := strings.Index(input, " ")
-	if loc == -1 {
+	space := strings.Index(input, " ")
+	if space == -1 {
 		return input, ""
 	}
-	return input[:loc], input[loc+1:]
+	next := space + 1
+	for next < len(input) && input[next] == ' ' {
+		next++
+	}
+	return input[:space], input[next:]
 }
 
 func parseLine(line string) []Span {
