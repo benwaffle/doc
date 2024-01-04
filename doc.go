@@ -98,18 +98,20 @@ type textSpan struct {
 var allWhitespace, _ = regexp.Compile(`^\s+$`)
 
 func (t textSpan) Render(_ int) string {
+	text := strings.ReplaceAll(t.Text, "\\&", "") // unescape literals
+
 	var res string
 	switch t.Typ {
 	case tagEnvVar:
-		res = fmt.Sprintf("$%s", t.Text)
+		res = fmt.Sprintf("$%s", text)
 	case tagSingleQuote:
-		res = fmt.Sprintf("'%s'", t.Text)
+		res = fmt.Sprintf("'%s'", text)
 	case tagDoubleQuote:
-		res = fmt.Sprintf("\"%s\"", t.Text)
+		res = fmt.Sprintf("\"%s\"", text)
 	case tagSubsectionHeader:
-		res = styles[tagSubsectionHeader].Render(t.Text) + "\n"
+		res = styles[tagSubsectionHeader].Render(text) + "\n"
 	default:
-		res = styles[t.Typ].Render(t.Text)
+		res = styles[t.Typ].Render(text)
 	}
 	if !t.NoSpace && !allWhitespace.MatchString(t.Text) {
 		res += " "
