@@ -73,6 +73,14 @@ func (t textSpan) Render(_ int) string {
 	return res
 }
 
+var decorationStyles = map[decorationTag][]string{
+	decorationOptional:      {"[", "]"},
+	decorationParens:        {"(", ")"},
+	decorationSingleQuote:   {"'", "'"},
+	decorationDoubleQuote:   {"\"", "\""},
+	decorationQuotedLiteral: {"‘", "’"},
+}
+
 func (d decoratedSpan) Render(width int) string {
 	res := ""
 	for _, span := range d.Contents {
@@ -86,11 +94,13 @@ func (d decoratedSpan) Render(width int) string {
 var flagStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
 
 func (f flagSpan) Render(_ int) string {
+	flag := strings.ReplaceAll(f.Flag, "\\&", "") // unescape literals
+
 	dash := ""
 	if f.Dash {
 		dash = "-"
 	}
-	res := flagStyle.Render(dash + f.Flag)
+	res := flagStyle.Render(dash + flag)
 	if !f.NoSpace {
 		res += " "
 	}

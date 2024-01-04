@@ -65,14 +65,6 @@ const (
 	decorationQuotedLiteral
 )
 
-var decorationStyles = map[decorationTag][]string{
-	decorationOptional:      {"[", "]"},
-	decorationParens:        {"(", ")"},
-	decorationSingleQuote:   {"'", "'"},
-	decorationDoubleQuote:   {"\"", "\""},
-	decorationQuotedLiteral: {"‘", "’"},
-}
-
 type decoratedSpan struct {
 	Typ      decorationTag
 	Contents []Span
