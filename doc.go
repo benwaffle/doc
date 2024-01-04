@@ -67,7 +67,6 @@ const (
 	tagLiteral
 	tagSymbolic
 	tagStandard
-	tagParens
 	tagBold
 	tagItalic
 )
@@ -103,8 +102,6 @@ func (t textSpan) Render(_ int) string {
 	switch t.Typ {
 	case tagEnvVar:
 		res = fmt.Sprintf("$%s", t.Text)
-	case tagParens:
-		res = fmt.Sprintf("(%s)", t.Text)
 	default:
 		res = styles[t.Typ].Render(t.Text)
 	}
@@ -158,6 +155,20 @@ func (o optional) Render(width int) string {
 	}
 	res = strings.TrimSuffix(res, " ")
 	res += "] "
+	return res
+}
+
+type parens struct {
+	Contents []Span
+}
+
+func (p parens) Render(width int) string {
+	res := "("
+	for _, span := range p.Contents {
+		res += span.Render(width)
+	}
+	res = strings.TrimSuffix(res, " ")
+	res += ") "
 	return res
 }
 
@@ -271,11 +282,6 @@ tokenizer:
 			res = append(res, textSpan{tagStandard, standard, false})
 			line = rest
 			lastMacro = "St"
-		case "Pq": // parens
-			parens, rest := nextToken(rest)
-			res = append(res, textSpan{tagParens, parens, false})
-			line = rest
-			lastMacro = "Pq"
 		case "B": // bold
 			bold, rest := nextToken(rest)
 			res = append(res, textSpan{tagBold, bold, false})
@@ -337,6 +343,9 @@ tokenizer:
 				panic("Don't know how to handle Ns macro")
 			}
 			line = rest
+		case "Pq": // parens
+			res = append(res, parens{parseLine(rest)})
+			break tokenizer
 		case "Op": // optional
 			res = append(res, optional{parseLine(rest)})
 			break tokenizer
