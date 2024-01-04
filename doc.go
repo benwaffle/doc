@@ -366,8 +366,19 @@ tokenizer:
 				line = lastMacro + " " + line
 				repeatMacro = false
 			} else {
-				res = append(res, textSpan{tagPlain, token, false})
-				line = rest
+				// merge with previous plain text
+				if len(res) > 0 {
+					if span, ok := res[len(res)-1].(textSpan); ok && span.Typ == tagPlain && !span.NoSpace {
+						res[len(res)-1] = textSpan{tagPlain, span.Text + " " + token, false}
+						line = rest
+					} else {
+						res = append(res, textSpan{tagPlain, token, false})
+						line = rest
+					}
+				} else {
+					res = append(res, textSpan{tagPlain, token, false})
+					line = rest
+				}
 			}
 		}
 	}
