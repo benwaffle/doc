@@ -107,9 +107,15 @@ var (
 		return lipgloss.NewStyle().BorderStyle(b).Padding(0, 1)
 	}()
 
-	infoStyle = func() lipgloss.Style {
+	infoSmallHelpStyle = func() lipgloss.Style {
 		b := lipgloss.RoundedBorder()
 		b.Left = "┤"
+		return titleStyle.Copy().BorderStyle(b)
+	}()
+
+	infoFullHelpStyle = func() lipgloss.Style {
+		b := lipgloss.RoundedBorder()
+		b.TopLeft = "┬"
 		return titleStyle.Copy().BorderStyle(b)
 	}()
 )
@@ -213,9 +219,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		headerHeight := lipgloss.Height(m.headerView())
 		footerHeight := lipgloss.Height(m.footerView())
-		helpHeight := lipgloss.Height(m.helpView())
 		navWidth := lipgloss.Width(m.sidebarView())
-		verticalMarginHeight := headerHeight + footerHeight + helpHeight
+		verticalMarginHeight := headerHeight + footerHeight
 		contentWidth := m.windowWidth - navWidth
 
 		if !m.ready {
@@ -257,7 +262,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	return m.headerView() + "\n" + m.mainView() + "\n" + m.footerView() + "\n" + m.helpView()
+	return m.headerView() + "\n" + m.mainView() + "\n" + m.footerView()
 }
 
 func (m model) headerView() string {
@@ -286,11 +291,15 @@ func (m model) mainView() string {
 }
 
 func (m model) footerView() string {
+	infoStyle := infoSmallHelpStyle
+	if m.help.ShowAll {
+		infoStyle = infoFullHelpStyle
+	}
 	info := infoStyle.Render(fmt.Sprintf("%3.f%%", m.viewport.ScrollPercent()*100))
-	line := strings.Repeat("─", max(0, m.windowWidth-lipgloss.Width(info)))
-	return lipgloss.JoinHorizontal(lipgloss.Center, line, info)
-}
+	help := m.help.View(m.keys)
 
-func (m model) helpView() string {
-	return m.help.View(m.keys)
+	remainingWidth := m.windowWidth - lipgloss.Width(info)
+	topBorder := lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderTop(true).Width(remainingWidth)
+
+	return lipgloss.JoinHorizontal(lipgloss.Bottom, topBorder.Render(help), info)
 }
