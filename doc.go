@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type manPage struct {
@@ -25,33 +24,9 @@ type manPage struct {
 	Extra    string
 }
 
-func (m manPage) String() string {
-	res := fmt.Sprintf("-----\nname: %s\nsection: %d\ndate: %s\n-----\n", m.Name, m.Section, m.Date)
-	for _, section := range m.Sections {
-		res += fmt.Sprintf("%+v\n", section)
-	}
-	return res
-}
-
-type Span interface {
-	Render(width int) string
-}
-
 type section struct {
 	Name     string
 	Contents []Span
-}
-
-func (s section) String() string {
-	if false {
-		res := "# " + s.Name + "\n"
-		for i, span := range s.Contents {
-			res += fmt.Sprintf("\t%d %+v\n", i, span)
-		}
-		return res
-	} else {
-		return fmt.Sprintf("# %s\n%+v\n", s.Name, s.Contents)
-	}
 }
 
 type textTag int
@@ -73,50 +48,10 @@ const (
 	tagDoubleQuote
 )
 
-var styles = map[textTag]lipgloss.Style{
-	tagPlain:    lipgloss.NewStyle(),
-	tagNameRef:  lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
-	tagArg:      lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
-	tagVariable: lipgloss.NewStyle().Foreground(lipgloss.Color("13")),
-	tagPath:     lipgloss.NewStyle().Foreground(lipgloss.Color("14")),
-	tagSubsectionHeader: lipgloss.NewStyle().
-		Bold(true).
-		Margin(2, 0, 0, 0),
-	tagSymbolic: lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
-	tagStandard: lipgloss.NewStyle().Foreground(lipgloss.Color("12")),
-	tagBold:     lipgloss.NewStyle().Bold(true),
-	tagItalic:   lipgloss.NewStyle().Italic(true),
-	tagLiteral:  lipgloss.NewStyle(),
-}
-
 type textSpan struct {
 	Typ     textTag
 	Text    string
 	NoSpace bool // Set to false by default
-}
-
-var allWhitespace, _ = regexp.Compile(`^\s+$`)
-
-func (t textSpan) Render(_ int) string {
-	text := strings.ReplaceAll(t.Text, "\\&", "") // unescape literals
-
-	var res string
-	switch t.Typ {
-	case tagEnvVar:
-		res = fmt.Sprintf("$%s", text)
-	case tagSingleQuote:
-		res = fmt.Sprintf("'%s'", text)
-	case tagDoubleQuote:
-		res = fmt.Sprintf("\"%s\"", text)
-	case tagSubsectionHeader:
-		res = styles[tagSubsectionHeader].Render(text) + "\n"
-	default:
-		res = styles[t.Typ].Render(text)
-	}
-	if !t.NoSpace && !allWhitespace.MatchString(t.Text) {
-		res += " "
-	}
-	return res
 }
 
 type decorationTag int
@@ -143,34 +78,10 @@ type decoratedSpan struct {
 	Contents []Span
 }
 
-func (d decoratedSpan) Render(width int) string {
-	res := ""
-	for _, span := range d.Contents {
-		res += span.Render(width)
-	}
-	res = strings.TrimSuffix(res, " ")
-	res = decorationStyles[d.Typ][0] + res + decorationStyles[d.Typ][1] + " "
-	return res
-}
-
 type flagSpan struct {
 	Flag    string
 	Dash    bool
 	NoSpace bool // Set to false by default
-}
-
-var flagStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-
-func (f flagSpan) Render(_ int) string {
-	dash := ""
-	if f.Dash {
-		dash = "-"
-	}
-	res := flagStyle.Render(dash + f.Flag)
-	if !f.NoSpace {
-		res += " "
-	}
-	return res
 }
 
 type manRef struct {
@@ -178,54 +89,9 @@ type manRef struct {
 	Section *int
 }
 
-func (m manRef) Render(_ int) string {
-	res := m.Name
-	if m.Section != nil {
-		res += fmt.Sprintf("(%d)", *m.Section)
-	}
-	return res
-}
-
 type list struct {
 	Items   []listItem
 	Compact bool
-}
-
-func (l list) Render(width int) string {
-	res := ""
-	maxTagWidth := 8
-	tagFillWidth := lipgloss.NewStyle().Width(maxTagWidth)
-	contentFillWidth := lipgloss.NewStyle().Width(width - maxTagWidth)
-	contentMargin := lipgloss.NewStyle().MarginLeft(maxTagWidth)
-
-	for _, item := range l.Items {
-		res += "\n"
-		if !l.Compact {
-			res += "\n"
-		}
-
-		tag := ""
-		for _, span := range item.Tag {
-			tag += span.Render(width)
-		}
-		tag = strings.TrimSpace(tag)
-
-		contents := ""
-		for _, span := range item.Contents {
-			contents += span.Render(width)
-		}
-		contents = contentFillWidth.Render(contents)
-
-		if lipgloss.Width(tag) > maxTagWidth {
-			res += tag
-			res += "\n"
-			res += contentMargin.Render(contents)
-		} else {
-			tag = tagFillWidth.Render(tag)
-			res += lipgloss.JoinHorizontal(lipgloss.Top, tag, contents)
-		}
-	}
-	return res
 }
 
 type listItem struct {
