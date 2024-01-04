@@ -69,6 +69,7 @@ const (
 	tagStandard
 	tagBold
 	tagItalic
+	tagSingleQuote
 	tagDoubleQuote
 )
 
@@ -101,6 +102,8 @@ func (t textSpan) Render(_ int) string {
 	switch t.Typ {
 	case tagEnvVar:
 		res = fmt.Sprintf("$%s", t.Text)
+	case tagSingleQuote:
+		res = fmt.Sprintf("'%s'", t.Text)
 	case tagDoubleQuote:
 		res = fmt.Sprintf("\"%s\"", t.Text)
 	case tagSubsectionHeader:
@@ -111,6 +114,38 @@ func (t textSpan) Render(_ int) string {
 	if !t.NoSpace && !allWhitespace.MatchString(t.Text) {
 		res += " "
 	}
+	return res
+}
+
+type decorationTag int
+
+const (
+	decorationNone decorationTag = iota
+	decorationOptional
+	decorationParens
+	decorationSingleQuote
+	decorationDoubleQuote
+)
+
+var decorationStyles = map[decorationTag][]string{
+	decorationOptional:    {"[", "]"},
+	decorationParens:      {"(", ")"},
+	decorationSingleQuote: {"'", "'"},
+	decorationDoubleQuote: {"\"", "\""},
+}
+
+type decoratedSpan struct {
+	Typ      decorationTag
+	Contents []Span
+}
+
+func (d decoratedSpan) Render(width int) string {
+	res := ""
+	for _, span := range d.Contents {
+		res += span.Render(width)
+	}
+	res = strings.TrimSuffix(res, " ")
+	res = decorationStyles[d.Typ][0] + res + decorationStyles[d.Typ][1] + " "
 	return res
 }
 
@@ -144,34 +179,6 @@ func (m manRef) Render(_ int) string {
 	if m.Section != nil {
 		res += fmt.Sprintf("(%d)", *m.Section)
 	}
-	return res
-}
-
-type optional struct {
-	Contents []Span `json:"optionalContents"`
-}
-
-func (o optional) Render(width int) string {
-	res := "["
-	for _, span := range o.Contents {
-		res += span.Render(width)
-	}
-	res = strings.TrimSuffix(res, " ")
-	res += "] "
-	return res
-}
-
-type parens struct {
-	Contents []Span
-}
-
-func (p parens) Render(width int) string {
-	res := "("
-	for _, span := range p.Contents {
-		res += span.Render(width)
-	}
-	res = strings.TrimSuffix(res, " ")
-	res += ") "
 	return res
 }
 
@@ -295,11 +302,6 @@ tokenizer:
 			res = append(res, textSpan{tagStandard, standard, false})
 			line = rest
 			lastMacro = "St"
-		case "Dq": // double quote
-			quoted, rest := nextToken(rest)
-			res = append(res, textSpan{tagDoubleQuote, quoted, false})
-			line = rest
-			lastMacro = "Dq"
 		case "B": // bold
 			bold, rest := nextToken(rest)
 			res = append(res, textSpan{tagBold, bold, false})
@@ -362,10 +364,16 @@ tokenizer:
 			}
 			line = rest
 		case "Pq": // parens
-			res = append(res, parens{parseLine(rest)})
+			res = append(res, decoratedSpan{decorationParens, parseLine(rest)})
+			break tokenizer
+		case "Sq": // single quote
+			res = append(res, decoratedSpan{decorationSingleQuote, parseLine(rest)})
+			break tokenizer
+		case "Dq": // double quote
+			res = append(res, decoratedSpan{decorationDoubleQuote, parseLine(rest)})
 			break tokenizer
 		case "Op": // optional
-			res = append(res, optional{parseLine(rest)})
+			res = append(res, decoratedSpan{decorationOptional, parseLine(rest)})
 			break tokenizer
 		case ",", "|":
 			res = append(res, textSpan{tagPlain, token, false})
