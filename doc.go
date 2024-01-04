@@ -446,9 +446,8 @@ func parseMdoc(doc string) manPage {
 			}
 
 		case line == ".Nm": // .Nm - page name
-			if savedName == "" { // first invocation, save the name
-				name := line[4:]
-				savedName = name
+			if currentSection.Name == "SYNOPSIS" {
+				addSpans(textSpan{tagPlain, "\n", true})
 			}
 			addSpans(textSpan{tagNameRef, savedName, false})
 

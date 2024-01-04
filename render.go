@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -18,9 +19,12 @@ func (page manPage) render(width int) string {
 			res += "\n\n"
 		}
 		res += fmt.Sprintf("%s\n", sectionHeader.Render(section.Name))
+
+		contents := ""
 		for _, content := range section.Contents {
-			res += content.Render(width)
+			contents += content.Render(width)
 		}
+		res += strings.TrimSpace(contents)
 	}
 	return res
 }
