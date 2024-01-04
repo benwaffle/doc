@@ -173,16 +173,22 @@ func (p parens) Render(width int) string {
 }
 
 type list struct {
-	Items []listItem
+	Items   []listItem
+	Compact bool
 }
 
 func (l list) Render(width int) string {
 	res := ""
 	maxTagWidth := 8
-	contentStyle := lipgloss.NewStyle().MarginLeft(maxTagWidth).Width(width - maxTagWidth)
+	tagFillWidth := lipgloss.NewStyle().Width(maxTagWidth)
+	contentFillWidth := lipgloss.NewStyle().Width(width - maxTagWidth)
+	contentMargin := lipgloss.NewStyle().MarginLeft(maxTagWidth)
 
 	for _, item := range l.Items {
-		res += "\n\n"
+		res += "\n"
+		if !l.Compact {
+			res += "\n"
+		}
 
 		tag := ""
 		for _, span := range item.Tag {
@@ -194,15 +200,15 @@ func (l list) Render(width int) string {
 		for _, span := range item.Contents {
 			contents += span.Render(width)
 		}
-		contents = contentStyle.Render(contents)
+		contents = contentFillWidth.Render(contents)
 
 		if lipgloss.Width(tag) > maxTagWidth {
 			res += tag
 			res += "\n"
-			res += contents
+			res += contentMargin.Render(contents)
 		} else {
-			res += tag
-			res += contents[lipgloss.Width(tag):]
+			tag = tagFillWidth.Render(tag)
+			res += lipgloss.JoinHorizontal(lipgloss.Top, tag, contents)
 		}
 	}
 	return res
@@ -504,7 +510,7 @@ func parseMdoc(doc string) manPage {
 
 		case strings.HasPrefix(line, ".Bl"): // begin list
 			// TODO: parse list options
-			currentList = list{}
+			currentList = list{Compact: strings.Contains(line, "-compact")}
 
 		case strings.HasPrefix(line, ".It"): // list item
 			if currentListItem != nil {
