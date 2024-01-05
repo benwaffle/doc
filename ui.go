@@ -298,8 +298,11 @@ func (m model) footerView() string {
 	info := infoStyle.Render(fmt.Sprintf("%3.f%%", m.viewport.ScrollPercent()*100))
 	help := m.help.View(m.keys)
 
-	remainingWidth := m.windowWidth - lipgloss.Width(info)
-	topBorder := lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderTop(true).Width(remainingWidth)
+	remainingWidth := m.windowWidth - lipgloss.Width(info) - 1
+	helpStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.NormalBorder()).BorderTop(true).
+		PaddingLeft(1).
+		Width(remainingWidth)
 
-	return lipgloss.JoinHorizontal(lipgloss.Bottom, topBorder.Render(help), info)
+	return lipgloss.JoinHorizontal(lipgloss.Bottom, helpStyle.Render(help), info)
 }
