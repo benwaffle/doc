@@ -437,9 +437,6 @@ func parseMdoc(doc string) manPage {
 		case line == "." || line == "":
 			// ignore
 
-		case line[0] == '.':
-			// unknown macro
-
 		case strings.HasPrefix(line, "."):
 			addSpans(parseLine(line[1:])...)
 
