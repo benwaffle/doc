@@ -2,4 +2,4 @@
 
 A modern TUI for reading man pages, info pages, and tldr pages.
 
-![image](https://github.com/benwaffle/doc/assets/1713819/103cc93a-c602-44b1-9f5c-80da45d1da5f)
+![Screenshot 2024-01-06 at 5 59 03 PM](https://github.com/benwaffle/doc/assets/1713819/7ec230f9-2245-47b7-8006-459f31993386)
