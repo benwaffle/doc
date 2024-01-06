@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	listview "github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -20,13 +21,14 @@ type panel int
 const (
 	nav panel = iota
 	contents
+	search
 )
 
 type model struct {
 	page         manPage
-	ready        bool
 	viewport     viewport.Model
 	navigation   listview.Model
+	searchbox    textinput.Model
 	help         help.Model
 	keys         keyMap
 	windowWidth  int
@@ -43,6 +45,7 @@ type keyMap struct {
 	Up           key.Binding
 	Navigate     key.Binding
 	Search       key.Binding
+	Cancel       key.Binding
 	Help         key.Binding
 	Quit         key.Binding
 }
@@ -81,12 +84,15 @@ func defaultKeyMap() keyMap {
 			key.WithKeys("/"),
 			key.WithHelp("/", "search"),
 		),
+		Cancel: key.NewBinding(
+			key.WithKeys("esc"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "toggle help"),
 		),
 		Quit: key.NewBinding(
-			key.WithKeys("q", "esc", "ctrl+c"),
+			key.WithKeys("q", "ctrl+c"),
 			key.WithHelp("q", "quit"),
 		),
 	}
@@ -130,8 +136,10 @@ var (
 	tocItemStyle         = lipgloss.NewStyle()
 	selectedTocItemStyle = tocItemStyle.Copy().Foreground(lipgloss.Color("#ae00ff"))
 
+	focusColor = lipgloss.Color("#64708d")
+
 	titleStyle             = lipgloss.NewStyle().Padding(0, 1).Margin(1, 0)
-	focusNavTitleStyle     = titleStyle.Copy().Background(lipgloss.Color("#64708d")).Foreground(lipgloss.Color("#ddd"))
+	focusNavTitleStyle     = titleStyle.Copy().Background(focusColor).Foreground(lipgloss.Color("#ddd"))
 	unfocusedNavTitleStyle = titleStyle.Copy().Background(lipgloss.Color("#282a2e")).Foreground(lipgloss.Color("#888"))
 )
 
@@ -169,9 +177,17 @@ func NewModel(page manPage) *model {
 		focus:      contents,
 		navigation: buildTableOfContents(page),
 		viewport:   viewport.New(0, 0),
+		searchbox:  buildSearchBox(),
 	}
 
 	return m
+}
+
+func buildSearchBox() textinput.Model {
+	t := textinput.New()
+	t.Prompt = "Search: "
+	t.TextStyle = lipgloss.NewStyle().Background(focusColor).Foreground(lipgloss.Color("#fff"))
+	return t
 }
 
 func buildTableOfContents(page manPage) listview.Model {
@@ -198,6 +214,16 @@ func buildTableOfContents(page manPage) listview.Model {
 	navigation.SetFilteringEnabled(false)
 
 	return navigation
+}
+
+type FocusChangeMsg struct {
+	to panel
+}
+
+func changeFocus(to panel) tea.Cmd {
+	return func() tea.Msg {
+		return FocusChangeMsg{to: to}
+	}
 }
 
 func (m model) Init() tea.Cmd {
@@ -230,12 +256,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.help.ShowAll = !m.help.ShowAll
 		case key.Matches(msg, m.keys.Navigate):
 			if m.focus == nav {
-				m.focus = contents
+				cmds = append(cmds, changeFocus(contents))
 			} else {
-				m.focus = nav
+				cmds = append(cmds, changeFocus(nav))
 			}
+		case key.Matches(msg, m.keys.Search):
+			cmds = append(cmds, changeFocus(search))
+		case key.Matches(msg, m.keys.Cancel):
+			cmds = append(cmds, changeFocus(contents))
 		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
+		}
+
+	case FocusChangeMsg:
+		m.focus = msg.to
+		if msg.to == search {
+			m.searchbox.Focus()
+		} else {
+			m.searchbox.SetValue("")
+			m.searchbox.Blur()
 		}
 
 	case tea.WindowSizeMsg:
@@ -244,7 +283,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		titleHeight := lipgloss.Height(m.titleView(nav))
 		footerHeight := lipgloss.Height(m.footerView())
-		verticalMargins := titleHeight + footerHeight + 1 // +1 for panel margins
+		verticalMargins := titleHeight + footerHeight // +1 for panel margins
 		os.WriteFile("/tmp/tea.log", []byte(fmt.Sprintf("titleHeight[%d] footerHeight[%d] verticalMargins[%d]\n", titleHeight, footerHeight, verticalMargins)), 0644)
 
 		navWidth := lipgloss.Width(m.sidebarView())
@@ -255,14 +294,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent(wordwrap.String(m.page.Render(contentWidth), contentWidth))
 
 		m.navigation.SetHeight(m.windowHeight - verticalMargins)
-		m.help.Width = m.windowWidth
 	}
 
 	if m.focus == nav {
 		m.navigation, cmd = m.navigation.Update(msg)
 		cmds = append(cmds, cmd)
-	} else {
+	} else if m.focus == contents {
 		m.viewport, cmd = m.viewport.Update(msg)
+		cmds = append(cmds, cmd)
+	} else if m.focus == search {
+		m.searchbox, cmd = m.searchbox.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
@@ -313,15 +354,25 @@ func (m model) mainView() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, m.sidebarView(), m.contentsView())
 }
 
+func (m model) scrollPercentageView() string {
+	return scrollPctStyle.Render(fmt.Sprintf("%3.f%%", m.viewport.ScrollPercent()*100))
+}
+
 func (m model) footerView() string {
-	info := scrollPctStyle.Render(fmt.Sprintf("%3.f%%", m.viewport.ScrollPercent()*100))
-	help := m.help.View(m.keys)
+	info := m.scrollPercentageView()
+	remainingFooterWidth := m.windowWidth - lipgloss.Width(info)
 
-	remainingWidth := m.windowWidth - lipgloss.Width(info) - 1
-	helpStyle := lipgloss.NewStyle().
-		MarginBottom(1).
-		PaddingLeft(2).
-		Width(remainingWidth)
+	leftStyle := lipgloss.NewStyle().PaddingLeft(1)
+	var left string
 
-	return lipgloss.JoinHorizontal(lipgloss.Bottom, helpStyle.Render(help), info)
+	if m.focus == search {
+		m.searchbox.Width = remainingFooterWidth
+		left = m.searchbox.View()
+		left = leftStyle.Render(left)
+	} else {
+		left = m.help.View(m.keys)
+		left = leftStyle.Copy().Width(remainingFooterWidth).Render(left)
+	}
+
+	return lipgloss.JoinHorizontal(lipgloss.Bottom, left, info)
 }
