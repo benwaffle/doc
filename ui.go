@@ -161,7 +161,7 @@ func NewModel(page manPage) *model {
 		page:  page,
 		help:  help.New(),
 		keys:  defaultKeyMap(),
-		focus: nav,
+		focus: contents,
 	}
 
 	var sections []listview.Item

@@ -31,7 +31,7 @@ func (page manPage) render(width int) string {
 		}
 		res += strings.TrimSpace(contents)
 	}
-	res += "\n\n———————————————————\n\n" + page.Date
+	res += lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, false, false, false).Margin(2, 0).Render(page.Date)
 	return res
 }
 

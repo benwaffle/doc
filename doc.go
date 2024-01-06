@@ -313,6 +313,9 @@ func parseMdoc(doc string) manPage {
 
 		case strings.HasPrefix(line, ".TH"): // man page title
 			parts := strings.Split(line[4:], " ")
+			parts[0] = strings.Trim(parts[0], "\"")
+			parts[1] = strings.Trim(parts[1], "\"")
+
 			page.Name = parts[0]
 			section, err := strconv.Atoi(parts[1])
 			if err != nil {
@@ -327,9 +330,10 @@ func parseMdoc(doc string) manPage {
 				page.Sections = append(page.Sections, *currentSection)
 			}
 
-			currentSection = &section{
-				Name: line[4:],
-			}
+			name := line[4:]
+			name = strings.Trim(name, "\"")
+
+			currentSection = &section{Name: name}
 
 		case nameFull.MatchString(line): // .Nm - page name
 			parts := nameFull.FindStringSubmatch(line)
@@ -432,6 +436,9 @@ func parseMdoc(doc string) manPage {
 
 		case line == "." || line == "":
 			// ignore
+
+		case line[0] == '.':
+			// unknown macro
 
 		case strings.HasPrefix(line, "."):
 			addSpans(parseLine(line[1:])...)
