@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -31,6 +30,7 @@ type model struct {
 	searchbox    textinput.Model
 	help         help.Model
 	keys         keyMap
+	searchKeys   searchKeyMap
 	windowWidth  int
 	windowHeight int
 	focus        panel
@@ -44,10 +44,14 @@ type keyMap struct {
 	Down         key.Binding
 	Up           key.Binding
 	Navigate     key.Binding
-	Search       key.Binding
-	Cancel       key.Binding
+	BeginSearch  key.Binding
 	Help         key.Binding
 	Quit         key.Binding
+}
+
+type searchKeyMap struct {
+	SubmitSearch key.Binding
+	Cancel       key.Binding
 }
 
 func defaultKeyMap() keyMap {
@@ -80,12 +84,9 @@ func defaultKeyMap() keyMap {
 			key.WithKeys("tab"),
 			key.WithHelp("tab", "navigate"),
 		),
-		Search: key.NewBinding(
+		BeginSearch: key.NewBinding(
 			key.WithKeys("/"),
 			key.WithHelp("/", "search"),
-		),
-		Cancel: key.NewBinding(
-			key.WithKeys("esc"),
 		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
@@ -101,7 +102,7 @@ func defaultKeyMap() keyMap {
 func (k keyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		k.Navigate,
-		k.Search,
+		k.BeginSearch,
 		k.Down,
 		k.Up,
 		k.Help,
@@ -113,7 +114,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{
 			k.Navigate,
-			k.Search,
+			k.BeginSearch,
 		}, {
 			k.PageDown,
 			k.PageUp,
@@ -126,6 +127,35 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		}, {
 			k.Help,
 			k.Quit,
+		},
+	}
+}
+
+func defaultSearchKeyMap() searchKeyMap {
+	return searchKeyMap{
+		SubmitSearch: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "submit"),
+		),
+		Cancel: key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "cancel"),
+		),
+	}
+}
+
+func (sk searchKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{
+		sk.SubmitSearch,
+		sk.Cancel,
+	}
+}
+
+func (sk searchKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{
+			sk.SubmitSearch,
+			sk.Cancel,
 		},
 	}
 }
@@ -174,6 +204,7 @@ func NewModel(page manPage) *model {
 		page:       page,
 		help:       help.New(),
 		keys:       defaultKeyMap(),
+		searchKeys: defaultSearchKeyMap(),
 		focus:      contents,
 		navigation: buildTableOfContents(page),
 		viewport:   viewport.New(0, 0),
@@ -239,39 +270,47 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch {
-		// case key.Matches(msg, m.keys.PageDown):
-		// 	m.viewport.ViewDown()
-		// case key.Matches(msg, m.keys.PageUp):
-		// 	m.viewport.ViewUp()
-		// case key.Matches(msg, m.keys.HalfPageDown):
-		// 	m.viewport.HalfViewDown()
-		// case key.Matches(msg, m.keys.HalfPageUp):
-		// 	m.viewport.HalfViewUp()
-		// case key.Matches(msg, m.keys.Down):
-		// 	m.viewport.LineDown(1)
-		// case key.Matches(msg, m.keys.Up):
-		// 	m.viewport.LineUp(1)
-		case key.Matches(msg, m.keys.Help):
-			m.help.ShowAll = !m.help.ShowAll
-		case key.Matches(msg, m.keys.Navigate):
-			if m.focus == nav {
+		if m.focus == search {
+			switch {
+			case key.Matches(msg, m.searchKeys.Cancel):
 				cmds = append(cmds, changeFocus(contents))
-			} else {
-				cmds = append(cmds, changeFocus(nav))
+			case key.Matches(msg, m.searchKeys.SubmitSearch):
+				cmds = append(cmds, changeFocus(contents))
 			}
-		case key.Matches(msg, m.keys.Search):
-			cmds = append(cmds, changeFocus(search))
-		case key.Matches(msg, m.keys.Cancel):
-			cmds = append(cmds, changeFocus(contents))
-		case key.Matches(msg, m.keys.Quit):
-			return m, tea.Quit
+		} else {
+			switch {
+			// case key.Matches(msg, m.keys.PageDown):
+			// 	m.viewport.ViewDown()
+			// case key.Matches(msg, m.keys.PageUp):
+			// 	m.viewport.ViewUp()
+			// case key.Matches(msg, m.keys.HalfPageDown):
+			// 	m.viewport.HalfViewDown()
+			// case key.Matches(msg, m.keys.HalfPageUp):
+			// 	m.viewport.HalfViewUp()
+			// case key.Matches(msg, m.keys.Down):
+			// 	m.viewport.LineDown(1)
+			// case key.Matches(msg, m.keys.Up):
+			// 	m.viewport.LineUp(1)
+			case key.Matches(msg, m.keys.Help):
+				m.help.ShowAll = !m.help.ShowAll
+			case key.Matches(msg, m.keys.Navigate):
+				if m.focus == nav {
+					cmds = append(cmds, changeFocus(contents))
+				} else {
+					cmds = append(cmds, changeFocus(nav))
+				}
+			case key.Matches(msg, m.keys.BeginSearch):
+				cmds = append(cmds, changeFocus(search))
+			case key.Matches(msg, m.keys.Quit):
+				return m, tea.Quit
+			}
 		}
 
 	case FocusChangeMsg:
 		m.focus = msg.to
 		if msg.to == search {
 			m.searchbox.Focus()
+			m.help.ShowAll = false
 		} else {
 			m.searchbox.SetValue("")
 			m.searchbox.Blur()
@@ -284,7 +323,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		titleHeight := lipgloss.Height(m.titleView(nav))
 		footerHeight := lipgloss.Height(m.footerView())
 		verticalMargins := titleHeight + footerHeight // +1 for panel margins
-		os.WriteFile("/tmp/tea.log", []byte(fmt.Sprintf("titleHeight[%d] footerHeight[%d] verticalMargins[%d]\n", titleHeight, footerHeight, verticalMargins)), 0644)
 
 		navWidth := lipgloss.Width(m.sidebarView())
 		contentWidth := m.windowWidth - navWidth
@@ -359,20 +397,21 @@ func (m model) scrollPercentageView() string {
 }
 
 func (m model) footerView() string {
-	info := m.scrollPercentageView()
-	remainingFooterWidth := m.windowWidth - lipgloss.Width(info)
+	margin := lipgloss.NewStyle().Margin(0, 1, 0, 1).Render // whole footer margin
 
-	leftStyle := lipgloss.NewStyle().PaddingLeft(1)
+	scrollPct := m.scrollPercentageView()
+	leftWidth := m.windowWidth - lipgloss.Width(scrollPct) - 2
+	helpStyle := lipgloss.NewStyle().Width(leftWidth).Render
+	m.help.Width = leftWidth
+	m.searchbox.Width = leftWidth - lipgloss.Width(m.searchbox.Prompt) - 2
+
 	var left string
 
 	if m.focus == search {
-		m.searchbox.Width = remainingFooterWidth
-		left = m.searchbox.View()
-		left = leftStyle.Render(left)
+		left = lipgloss.JoinVertical(lipgloss.Left, m.searchbox.View(), helpStyle(m.help.View(m.searchKeys)))
 	} else {
-		left = m.help.View(m.keys)
-		left = leftStyle.Copy().Width(remainingFooterWidth).Render(left)
+		left = helpStyle(m.help.View(m.keys))
 	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Bottom, left, info)
+	return margin(lipgloss.JoinHorizontal(lipgloss.Bottom, left, scrollPct))
 }
