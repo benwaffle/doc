@@ -17,7 +17,7 @@ var sectionHeader = lipgloss.NewStyle().
 	BorderStyle(lipgloss.RoundedBorder()).
 	BorderBottom(true)
 
-func (page manPage) render(width int) string {
+func (page manPage) Render(width int) string {
 	res := ""
 	for i, section := range page.Sections {
 		if i != 0 {

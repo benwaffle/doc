@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -105,6 +106,9 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{
+			k.Navigate,
+			k.Search,
+		}, {
 			k.PageDown,
 			k.PageUp,
 		}, {
@@ -126,8 +130,9 @@ var (
 	tocItemStyle         = lipgloss.NewStyle()
 	selectedTocItemStyle = tocItemStyle.Copy().Foreground(lipgloss.Color("#ae00ff"))
 
-	focusNavTitleStyle     = lipgloss.NewStyle().Background(lipgloss.Color("#64708d")).Foreground(lipgloss.Color("#ddd")).Padding(0, 1).Margin(1, 0)
-	unfocusedNavTitleStyle = lipgloss.NewStyle().Background(lipgloss.Color("#282a2e")).Foreground(lipgloss.Color("#888")).Padding(0, 1).Margin(1, 0)
+	titleStyle             = lipgloss.NewStyle().Padding(0, 1).Margin(1, 0)
+	focusNavTitleStyle     = titleStyle.Copy().Background(lipgloss.Color("#64708d")).Foreground(lipgloss.Color("#ddd"))
+	unfocusedNavTitleStyle = titleStyle.Copy().Background(lipgloss.Color("#282a2e")).Foreground(lipgloss.Color("#888"))
 )
 
 type navItem string
@@ -158,14 +163,20 @@ func (navItemDelegate) Render(w io.Writer, m listview.Model, index int, listItem
 
 func NewModel(page manPage) *model {
 	m := &model{
-		page:  page,
-		help:  help.New(),
-		keys:  defaultKeyMap(),
-		focus: contents,
+		page:       page,
+		help:       help.New(),
+		keys:       defaultKeyMap(),
+		focus:      contents,
+		navigation: buildTableOfContents(page),
+		viewport:   viewport.New(0, 0),
 	}
 
+	return m
+}
+
+func buildTableOfContents(page manPage) listview.Model {
 	var sections []listview.Item
-	for _, section := range m.page.Sections {
+	for _, section := range page.Sections {
 		sections = append(sections, navItem(section.Name))
 
 		for _, content := range section.Contents {
@@ -179,14 +190,14 @@ func NewModel(page manPage) *model {
 	for _, item := range sections {
 		maxWidth = max(maxWidth, lipgloss.Width(string(item.(navItem))))
 	}
-	m.navigation = listview.New(sections, navItemDelegate{}, maxWidth, 100)
+	navigation := listview.New(sections, navItemDelegate{}, maxWidth, 100)
 
-	m.navigation.SetShowTitle(false)
-	m.navigation.SetShowStatusBar(false)
-	m.navigation.SetShowHelp(false)
-	m.navigation.SetFilteringEnabled(false)
+	navigation.SetShowTitle(false)
+	navigation.SetShowStatusBar(false)
+	navigation.SetShowHelp(false)
+	navigation.SetFilteringEnabled(false)
 
-	return m
+	return navigation
 }
 
 func (m model) Init() tea.Cmd {
@@ -231,44 +242,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.windowWidth = msg.Width
 		m.windowHeight = msg.Height
 
+		titleHeight := lipgloss.Height(m.titleView(nav))
 		footerHeight := lipgloss.Height(m.footerView())
+		verticalMargins := titleHeight + footerHeight + 1 // +1 for panel margins
+		os.WriteFile("/tmp/tea.log", []byte(fmt.Sprintf("titleHeight[%d] footerHeight[%d] verticalMargins[%d]\n", titleHeight, footerHeight, verticalMargins)), 0644)
+
 		navWidth := lipgloss.Width(m.sidebarView())
-		verticalMarginHeight := footerHeight + 4 // TODO: 4 is for the titles
 		contentWidth := m.windowWidth - navWidth
 
-		if !m.ready {
-			// Since this program is using the full size of the viewport we
-			// need to wait until we've received the window dimensions before
-			// we can initialize the viewport. The initial dimensions come in
-			// quickly, though asynchronously, which is why we wait for them
-			// here.
-			m.viewport = viewport.New(contentWidth, m.windowHeight-verticalMarginHeight)
-			// m.viewport.YPosition = headerHeight
-			// m.viewport.HighPerformanceRendering = true
-			m.viewport.SetContent(wordwrap.String(m.page.render(contentWidth), m.windowWidth-navWidth))
+		m.viewport.Width = m.windowWidth - navWidth
+		m.viewport.Height = m.windowHeight - verticalMargins
+		m.viewport.SetContent(wordwrap.String(m.page.Render(contentWidth), contentWidth))
 
-			m.ready = true
-			// This is only necessary for high performance rendering, which in
-			// most cases you won't need.
-			//
-			// Render the viewport one line below the header.
-			// m.viewport.YPosition = headerHeight + 1
-		} else {
-			m.viewport.Width = m.windowWidth - navWidth
-			m.viewport.Height = m.windowHeight - verticalMarginHeight
-		}
-
-		m.navigation.SetHeight(m.windowHeight - verticalMarginHeight)
+		m.navigation.SetHeight(m.windowHeight - verticalMargins)
 		m.help.Width = m.windowWidth
-
-		// cmds = append(cmds, viewport.Sync(m.viewport))
-
-		// default:
-		// 	m.viewport, cmd = m.viewport.Update(msg)
-		// 	cmds = append(cmds, cmd)
-
-		// 	m.navigation, cmd = m.navigation.Update(msg)
-		// 	cmds = append(cmds, cmd)
 	}
 
 	if m.focus == nav {
@@ -286,28 +273,26 @@ func (m model) View() string {
 	return m.mainView() + "\n" + m.footerView()
 }
 
-var panelStyle = lipgloss.NewStyle().Margin(1)
-
-func (m model) sidebarView() string {
-	var title string
-	if m.focus == nav {
-		title = focusNavTitleStyle.Render("Table of Contents")
-	} else {
-		title = unfocusedNavTitleStyle.Render("Table of Contents")
+func (m model) titleView(panel panel) string {
+	style := unfocusedNavTitleStyle
+	if m.focus == panel {
+		style = focusNavTitleStyle
 	}
 
-	return panelStyle.Render(title + "\n" + m.navigation.View())
+	if panel == nav {
+		return style.Render("Table of Contents")
+	} else {
+		return style.Render(fmt.Sprintf("%s(%d)", m.page.Name, m.page.Section))
+	}
+}
+
+func (m model) sidebarView() string {
+	style := lipgloss.NewStyle().Margin(0, 2, 0, 1)
+	return style.Render(m.titleView(nav) + "\n" + m.navigation.View())
 }
 
 func (m model) contentsView() string {
-	var title string
-	if m.focus == contents {
-		title = focusNavTitleStyle.Render(fmt.Sprintf("%s(%d)", m.page.Name, m.page.Section))
-	} else {
-		title = unfocusedNavTitleStyle.Render(fmt.Sprintf("%s(%d)", m.page.Name, m.page.Section))
-	}
-
-	return panelStyle.Render(title + "\n" + m.viewport.View())
+	return m.titleView(contents) + "\n" + m.viewport.View()
 }
 
 /*
