@@ -14,6 +14,13 @@ import (
 	"github.com/muesli/reflow/wordwrap"
 )
 
+type panel int
+
+const (
+	nav panel = iota
+	contents
+)
+
 type model struct {
 	page         manPage
 	ready        bool
@@ -23,6 +30,7 @@ type model struct {
 	keys         keyMap
 	windowWidth  int
 	windowHeight int
+	focus        panel
 }
 
 type keyMap struct {
@@ -32,6 +40,8 @@ type keyMap struct {
 	HalfPageDown key.Binding
 	Down         key.Binding
 	Up           key.Binding
+	Navigate     key.Binding
+	Search       key.Binding
 	Help         key.Binding
 	Quit         key.Binding
 }
@@ -62,6 +72,14 @@ func defaultKeyMap() keyMap {
 			key.WithKeys("down", "j"),
 			key.WithHelp("↓/j", "down"),
 		),
+		Navigate: key.NewBinding(
+			key.WithKeys("tab"),
+			key.WithHelp("tab", "navigate"),
+		),
+		Search: key.NewBinding(
+			key.WithKeys("/"),
+			key.WithHelp("/", "search"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "toggle help"),
@@ -75,6 +93,8 @@ func defaultKeyMap() keyMap {
 
 func (k keyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
+		k.Navigate,
+		k.Search,
 		k.Down,
 		k.Up,
 		k.Help,
@@ -101,27 +121,14 @@ func (k keyMap) FullHelp() [][]key.Binding {
 }
 
 var (
-	titleStyle = func() lipgloss.Style {
-		b := lipgloss.RoundedBorder()
-		b.Right = "├"
-		return lipgloss.NewStyle().BorderStyle(b).Padding(0, 1)
-	}()
+	scrollPctStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder())
 
-	infoSmallHelpStyle = func() lipgloss.Style {
-		b := lipgloss.RoundedBorder()
-		b.Left = "┤"
-		return titleStyle.Copy().BorderStyle(b)
-	}()
+	tocItemStyle         = lipgloss.NewStyle()
+	selectedTocItemStyle = tocItemStyle.Copy().Foreground(lipgloss.Color("#ae00ff"))
 
-	infoFullHelpStyle = func() lipgloss.Style {
-		b := lipgloss.RoundedBorder()
-		b.TopLeft = "┬"
-		return titleStyle.Copy().BorderStyle(b)
-	}()
+	focusNavTitleStyle     = lipgloss.NewStyle().Background(lipgloss.Color("#64708d")).Foreground(lipgloss.Color("#ddd")).Padding(0, 1).Margin(1, 0)
+	unfocusedNavTitleStyle = lipgloss.NewStyle().Background(lipgloss.Color("#282a2e")).Foreground(lipgloss.Color("#888")).Padding(0, 1).Margin(1, 0)
 )
-
-var itemStyle = lipgloss.NewStyle()
-var selectedItemStyle = itemStyle.Copy().Foreground(lipgloss.Color("#ae00ff"))
 
 type navItem string
 
@@ -143,17 +150,18 @@ func (navItemDelegate) Render(w io.Writer, m listview.Model, index int, listItem
 	str := fmt.Sprintf("%s", i)
 
 	if index == m.Index() {
-		fmt.Fprint(w, selectedItemStyle.Render(str))
+		fmt.Fprint(w, selectedTocItemStyle.Render(str))
 	} else {
-		fmt.Fprint(w, itemStyle.Render(str))
+		fmt.Fprint(w, tocItemStyle.Render(str))
 	}
 }
 
 func NewModel(page manPage) *model {
 	m := &model{
-		page: page,
-		help: help.New(),
-		keys: defaultKeyMap(),
+		page:  page,
+		help:  help.New(),
+		keys:  defaultKeyMap(),
+		focus: nav,
 	}
 
 	var sections []listview.Item
@@ -173,10 +181,10 @@ func NewModel(page manPage) *model {
 	}
 	m.navigation = listview.New(sections, navItemDelegate{}, maxWidth, 100)
 
-	m.navigation.SetShowStatusBar(false)
-	m.navigation.SetShowFilter(false)
 	m.navigation.SetShowTitle(false)
+	m.navigation.SetShowStatusBar(false)
 	m.navigation.SetShowHelp(false)
+	m.navigation.SetFilteringEnabled(false)
 
 	return m
 }
@@ -195,20 +203,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, m.keys.PageDown):
-			m.viewport.ViewDown()
-		case key.Matches(msg, m.keys.PageUp):
-			m.viewport.ViewUp()
-		case key.Matches(msg, m.keys.HalfPageDown):
-			m.viewport.HalfViewDown()
-		case key.Matches(msg, m.keys.HalfPageUp):
-			m.viewport.HalfViewUp()
-		case key.Matches(msg, m.keys.Down):
-			m.viewport.LineDown(1)
-		case key.Matches(msg, m.keys.Up):
-			m.viewport.LineUp(1)
+		// case key.Matches(msg, m.keys.PageDown):
+		// 	m.viewport.ViewDown()
+		// case key.Matches(msg, m.keys.PageUp):
+		// 	m.viewport.ViewUp()
+		// case key.Matches(msg, m.keys.HalfPageDown):
+		// 	m.viewport.HalfViewDown()
+		// case key.Matches(msg, m.keys.HalfPageUp):
+		// 	m.viewport.HalfViewUp()
+		// case key.Matches(msg, m.keys.Down):
+		// 	m.viewport.LineDown(1)
+		// case key.Matches(msg, m.keys.Up):
+		// 	m.viewport.LineUp(1)
 		case key.Matches(msg, m.keys.Help):
 			m.help.ShowAll = !m.help.ShowAll
+		case key.Matches(msg, m.keys.Navigate):
+			if m.focus == nav {
+				m.focus = contents
+			} else {
+				m.focus = nav
+			}
 		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
 		}
@@ -217,10 +231,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.windowWidth = msg.Width
 		m.windowHeight = msg.Height
 
-		headerHeight := lipgloss.Height(m.headerView())
 		footerHeight := lipgloss.Height(m.footerView())
 		navWidth := lipgloss.Width(m.sidebarView())
-		verticalMarginHeight := headerHeight + footerHeight
+		verticalMarginHeight := footerHeight + 4 // TODO: 4 is for the titles
 		contentWidth := m.windowWidth - navWidth
 
 		if !m.ready {
@@ -241,20 +254,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Render the viewport one line below the header.
 			// m.viewport.YPosition = headerHeight + 1
 		} else {
-			m.viewport.Width = msg.Width - navWidth
-			m.viewport.Height = msg.Height - verticalMarginHeight
+			m.viewport.Width = m.windowWidth - navWidth
+			m.viewport.Height = m.windowHeight - verticalMarginHeight
 		}
 
-		m.navigation.SetHeight(msg.Height - verticalMarginHeight)
-		m.help.Width = msg.Width
+		m.navigation.SetHeight(m.windowHeight - verticalMarginHeight)
+		m.help.Width = m.windowWidth
 
 		// cmds = append(cmds, viewport.Sync(m.viewport))
 
-	default:
-		m.viewport, cmd = m.viewport.Update(msg)
-		cmds = append(cmds, cmd)
+		// default:
+		// 	m.viewport, cmd = m.viewport.Update(msg)
+		// 	cmds = append(cmds, cmd)
 
+		// 	m.navigation, cmd = m.navigation.Update(msg)
+		// 	cmds = append(cmds, cmd)
+	}
+
+	if m.focus == nav {
 		m.navigation, cmd = m.navigation.Update(msg)
+		cmds = append(cmds, cmd)
+	} else {
+		m.viewport, cmd = m.viewport.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
@@ -262,46 +283,59 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	return m.headerView() + "\n" + m.mainView() + "\n" + m.footerView()
+	return m.mainView() + "\n" + m.footerView()
 }
 
-func (m model) headerView() string {
-	name := titleStyle.Render(m.page.Name)
-	section := titleStyle.Render(fmt.Sprintf("Section %d", m.page.Section))
-	date := titleStyle.Render(m.page.Date)
-
-	// 🤮
-	line := strings.Repeat("─", max(0, m.windowWidth-lipgloss.Width(name)-lipgloss.Width(section)-lipgloss.Width(date)-2))
-	return lipgloss.JoinHorizontal(lipgloss.Center, name, "─", section, "─", date, line)
-}
-
-var border = lipgloss.NewStyle().
-	BorderStyle(lipgloss.NormalBorder()).
-	BorderRight(true).
-	PaddingLeft(1).
-	PaddingRight(1).
-	MarginRight(1)
+var panelStyle = lipgloss.NewStyle().Margin(1)
 
 func (m model) sidebarView() string {
-	return border.Render(m.navigation.View())
+	var title string
+	if m.focus == nav {
+		title = focusNavTitleStyle.Render("Table of Contents")
+	} else {
+		title = unfocusedNavTitleStyle.Render("Table of Contents")
+	}
+
+	return panelStyle.Render(title + "\n" + m.navigation.View())
 }
 
+func (m model) contentsView() string {
+	var title string
+	if m.focus == contents {
+		title = focusNavTitleStyle.Render(fmt.Sprintf("%s(%d)", m.page.Name, m.page.Section))
+	} else {
+		title = unfocusedNavTitleStyle.Render(fmt.Sprintf("%s(%d)", m.page.Name, m.page.Section))
+	}
+
+	return panelStyle.Render(title + "\n" + m.viewport.View())
+}
+
+/*
+mainView
+
+- sidebarView
+  - title
+  - navigation
+
+- contentsView
+  - title
+  - viewport
+
+- footerView
+  - help
+*/
 func (m model) mainView() string {
-	return lipgloss.JoinHorizontal(lipgloss.Top, m.sidebarView(), m.viewport.View())
+	return lipgloss.JoinHorizontal(lipgloss.Top, m.sidebarView(), m.contentsView())
 }
 
 func (m model) footerView() string {
-	infoStyle := infoSmallHelpStyle
-	if m.help.ShowAll {
-		infoStyle = infoFullHelpStyle
-	}
-	info := infoStyle.Render(fmt.Sprintf("%3.f%%", m.viewport.ScrollPercent()*100))
+	info := scrollPctStyle.Render(fmt.Sprintf("%3.f%%", m.viewport.ScrollPercent()*100))
 	help := m.help.View(m.keys)
 
 	remainingWidth := m.windowWidth - lipgloss.Width(info) - 1
 	helpStyle := lipgloss.NewStyle().
-		BorderStyle(lipgloss.NormalBorder()).BorderTop(true).
-		PaddingLeft(1).
+		MarginBottom(1).
+		PaddingLeft(2).
 		Width(remainingWidth)
 
 	return lipgloss.JoinHorizontal(lipgloss.Bottom, helpStyle.Render(help), info)

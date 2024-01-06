@@ -31,6 +31,7 @@ func (page manPage) render(width int) string {
 		}
 		res += strings.TrimSpace(contents)
 	}
+	res += "\n\n———————————————————\n\n" + page.Date
 	return res
 }
 
