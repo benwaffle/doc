@@ -23,8 +23,21 @@ const (
 	search
 )
 
+type searchResult struct {
+	row, col int
+}
+
+type searchState struct {
+	searching bool
+	query     string
+	results   []searchResult
+	row       int
+	col       int
+}
+
 type model struct {
 	page         manPage
+	lines        []string
 	viewport     viewport.Model
 	navigation   listview.Model
 	searchbox    textinput.Model
@@ -34,6 +47,7 @@ type model struct {
 	windowWidth  int
 	windowHeight int
 	focus        panel
+	search       searchState
 }
 
 type keyMap struct {
@@ -217,7 +231,9 @@ func NewModel(page manPage) *model {
 func buildSearchBox() textinput.Model {
 	t := textinput.New()
 	t.Prompt = "Search: "
+	t.Width = 60
 	t.TextStyle = lipgloss.NewStyle().Background(focusColor).Foreground(lipgloss.Color("#fff"))
+	t.Cursor.TextStyle = t.TextStyle
 	return t
 }
 
@@ -277,6 +293,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case key.Matches(msg, m.searchKeys.SubmitSearch):
 				cmds = append(cmds, changeFocus(contents))
 			}
+			m.updateSearchResults(m.searchbox.Value())
 		} else {
 			switch {
 			// case key.Matches(msg, m.keys.PageDown):
@@ -300,6 +317,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmds = append(cmds, changeFocus(nav))
 				}
 			case key.Matches(msg, m.keys.BeginSearch):
+				// I used a tea.Cmd so that `/` isn't added to the search box
 				cmds = append(cmds, changeFocus(search))
 			case key.Matches(msg, m.keys.Quit):
 				return m, tea.Quit
@@ -329,7 +347,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.viewport.Width = m.windowWidth - navWidth
 		m.viewport.Height = m.windowHeight - verticalMargins
-		m.viewport.SetContent(wordwrap.String(m.page.Render(contentWidth), contentWidth))
+
+		contents := wordwrap.String(m.page.Render(contentWidth), contentWidth)
+		m.lines = strings.Split(contents, "\n")
+		m.viewport.SetContent(contents)
 
 		m.navigation.SetHeight(m.windowHeight - verticalMargins)
 	}
@@ -346,6 +367,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+func (m *model) searchForString(query string) []searchResult {
+	var results []searchResult
+	for row := 0; row < len(m.lines); row++ {
+		col := 0
+		for {
+			found := strings.Index(m.lines[row][col:], query)
+			if found == -1 {
+				break
+			}
+
+			results = append(results, searchResult{row: row, col: col + found})
+			col += found + len(query) + 1
+			if col > len(m.lines[row]) {
+				break
+			}
+		}
+	}
+	return results
+}
+
+func (m *model) updateSearchResults(query string) {
+	if query == "" {
+		return
+	}
+	m.search.results = m.searchForString(query)
 }
 
 func (m model) View() string {
@@ -403,12 +451,17 @@ func (m model) footerView() string {
 	leftWidth := m.windowWidth - lipgloss.Width(scrollPct) - 2
 	helpStyle := lipgloss.NewStyle().Width(leftWidth).Render
 	m.help.Width = leftWidth
-	m.searchbox.Width = leftWidth - lipgloss.Width(m.searchbox.Prompt) - 2
 
 	var left string
 
 	if m.focus == search {
-		left = lipgloss.JoinVertical(lipgloss.Left, m.searchbox.View(), helpStyle(m.help.View(m.searchKeys)))
+		searchState := ""
+		if m.searchbox.Value() != "" {
+			searchState = fmt.Sprintf("Found %d results for `%s'", len(m.search.results), m.searchbox.Value())
+		}
+		left = lipgloss.JoinVertical(lipgloss.Left,
+			m.searchbox.View()+"     "+searchState,
+			helpStyle(m.help.View(m.searchKeys)))
 	} else {
 		left = helpStyle(m.help.View(m.keys))
 	}
