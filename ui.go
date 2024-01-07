@@ -127,8 +127,6 @@ func (k keyMap) ShortHelp() []key.Binding {
 		k.BeginSearch,
 		k.Down,
 		k.Up,
-		k.Next,
-		k.Previous,
 		k.Help,
 		k.Quit,
 	}
@@ -324,7 +322,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case key.Matches(msg, m.keys.BeginSearch):
 				m.focus = search
+				m.search.current = 0
 				m.searchbox.Focus()
+				m.searchbox.SetValue("")
 				m.help.ShowAll = false
 			case key.Matches(msg, m.keys.Next):
 				m.search.current = min(m.search.current+1, len(m.search.results)-1)
