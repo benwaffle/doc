@@ -24,15 +24,12 @@ const (
 )
 
 type searchResult struct {
-	row, col int
+	row, col, len int
 }
 
 type searchState struct {
-	searching bool
-	query     string
-	results   []searchResult
-	row       int
-	col       int
+	results []searchResult
+	current int // index of currently highlighted result
 }
 
 type model struct {
@@ -48,6 +45,7 @@ type model struct {
 	windowHeight int
 	focus        panel
 	search       searchState
+	debug        string
 }
 
 type keyMap struct {
@@ -59,6 +57,8 @@ type keyMap struct {
 	Up           key.Binding
 	Navigate     key.Binding
 	BeginSearch  key.Binding
+	Next         key.Binding
+	Previous     key.Binding
 	Help         key.Binding
 	Quit         key.Binding
 }
@@ -102,6 +102,14 @@ func defaultKeyMap() keyMap {
 			key.WithKeys("/"),
 			key.WithHelp("/", "search"),
 		),
+		Next: key.NewBinding(
+			key.WithKeys("n"),
+			key.WithHelp("n", "next"),
+		),
+		Previous: key.NewBinding(
+			key.WithKeys("N"),
+			key.WithHelp("N", "previous"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "toggle help"),
@@ -119,6 +127,8 @@ func (k keyMap) ShortHelp() []key.Binding {
 		k.BeginSearch,
 		k.Down,
 		k.Up,
+		k.Next,
+		k.Previous,
 		k.Help,
 		k.Quit,
 	}
@@ -138,6 +148,9 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		}, {
 			k.Down,
 			k.Up,
+		}, {
+			k.Next,
+			k.Previous,
 		}, {
 			k.Help,
 			k.Quit,
@@ -166,12 +179,7 @@ func (sk searchKeyMap) ShortHelp() []key.Binding {
 }
 
 func (sk searchKeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{
-			sk.SubmitSearch,
-			sk.Cancel,
-		},
-	}
+	return nil
 }
 
 var (
@@ -223,6 +231,7 @@ func NewModel(page manPage) *model {
 		navigation: buildTableOfContents(page),
 		viewport:   viewport.New(0, 0),
 		searchbox:  buildSearchBox(),
+		debug:      "debug text",
 	}
 
 	return m
@@ -263,16 +272,6 @@ func buildTableOfContents(page manPage) listview.Model {
 	return navigation
 }
 
-type FocusChangeMsg struct {
-	to panel
-}
-
-func changeFocus(to panel) tea.Cmd {
-	return func() tea.Msg {
-		return FocusChangeMsg{to: to}
-	}
-}
-
 func (m model) Init() tea.Cmd {
 	// Just return `nil`, which means "no I/O right now, please."
 	return nil
@@ -289,9 +288,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.focus == search {
 			switch {
 			case key.Matches(msg, m.searchKeys.Cancel):
-				cmds = append(cmds, changeFocus(contents))
+				m.focus = contents
+				m.search.current = 0
+				m.searchbox.SetValue("")
+				m.searchbox.Blur()
 			case key.Matches(msg, m.searchKeys.SubmitSearch):
-				cmds = append(cmds, changeFocus(contents))
+				m.focus = contents
+				m.searchbox.Blur()
+			default:
+				m.searchbox, cmd = m.searchbox.Update(msg)
+				cmds = append(cmds, cmd)
 			}
 			m.updateSearchResults(m.searchbox.Value())
 		} else {
@@ -312,26 +318,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.help.ShowAll = !m.help.ShowAll
 			case key.Matches(msg, m.keys.Navigate):
 				if m.focus == nav {
-					cmds = append(cmds, changeFocus(contents))
+					m.focus = contents
 				} else {
-					cmds = append(cmds, changeFocus(nav))
+					m.focus = nav
 				}
 			case key.Matches(msg, m.keys.BeginSearch):
-				// I used a tea.Cmd so that `/` isn't added to the search box
-				cmds = append(cmds, changeFocus(search))
+				m.focus = search
+				m.searchbox.Focus()
+				m.help.ShowAll = false
+			case key.Matches(msg, m.keys.Next):
+				m.search.current = min(m.search.current+1, len(m.search.results)-1)
+				m.renderContents()
+			case key.Matches(msg, m.keys.Previous):
+				m.search.current = max(m.search.current-1, 0)
+				m.renderContents()
 			case key.Matches(msg, m.keys.Quit):
 				return m, tea.Quit
+			default:
+				if m.focus == nav {
+					m.navigation, cmd = m.navigation.Update(msg)
+					cmds = append(cmds, cmd)
+				} else if m.focus == contents {
+					m.viewport, cmd = m.viewport.Update(msg)
+					cmds = append(cmds, cmd)
+				}
 			}
-		}
-
-	case FocusChangeMsg:
-		m.focus = msg.to
-		if msg.to == search {
-			m.searchbox.Focus()
-			m.help.ShowAll = false
-		} else {
-			m.searchbox.SetValue("")
-			m.searchbox.Blur()
 		}
 
 	case tea.WindowSizeMsg:
@@ -343,27 +354,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		verticalMargins := titleHeight + footerHeight // +1 for panel margins
 
 		navWidth := lipgloss.Width(m.sidebarView())
-		contentWidth := m.windowWidth - navWidth
+
+		m.renderContents()
 
 		m.viewport.Width = m.windowWidth - navWidth
 		m.viewport.Height = m.windowHeight - verticalMargins
 
-		contents := wordwrap.String(m.page.Render(contentWidth), contentWidth)
-		m.lines = strings.Split(contents, "\n")
-		m.viewport.SetContent(contents)
-
 		m.navigation.SetHeight(m.windowHeight - verticalMargins)
-	}
 
-	if m.focus == nav {
-		m.navigation, cmd = m.navigation.Update(msg)
-		cmds = append(cmds, cmd)
-	} else if m.focus == contents {
-		m.viewport, cmd = m.viewport.Update(msg)
-		cmds = append(cmds, cmd)
-	} else if m.focus == search {
-		m.searchbox, cmd = m.searchbox.Update(msg)
-		cmds = append(cmds, cmd)
+	default:
+		if m.focus == nav {
+			m.navigation, cmd = m.navigation.Update(msg)
+			cmds = append(cmds, cmd)
+		} else if m.focus == contents {
+			m.viewport, cmd = m.viewport.Update(msg)
+			cmds = append(cmds, cmd)
+		} else if m.focus == search {
+			m.searchbox, cmd = m.searchbox.Update(msg)
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	return m, tea.Batch(cmds...)
@@ -379,7 +388,11 @@ func (m *model) searchForString(query string) []searchResult {
 				break
 			}
 
-			results = append(results, searchResult{row: row, col: col + found})
+			results = append(results, searchResult{
+				row: row,
+				col: col + found,
+				len: len(query),
+			})
 			col += found + len(query) + 1
 			if col > len(m.lines[row]) {
 				break
@@ -394,6 +407,37 @@ func (m *model) updateSearchResults(query string) {
 		return
 	}
 	m.search.results = m.searchForString(query)
+	m.renderContents()
+}
+
+func (m *model) renderContents() {
+	navWidth := lipgloss.Width(m.sidebarView())
+	contentWidth := m.windowWidth - navWidth
+
+	oldLines := m.lines
+	_ = oldLines
+
+	contents := wordwrap.String(m.page.Render(contentWidth), contentWidth)
+	m.lines = strings.Split(contents, "\n")
+	lines := make([]string, len(m.lines))
+	copy(lines, m.lines)
+	if len(m.search.results) > 0 {
+		result := m.search.results[m.search.current]
+		m.debug = fmt.Sprintf("row[%d] col[%d]", result.row, result.col)
+		line := lines[result.row]
+
+		left := line[:result.col]
+		instance := line[result.col : result.col+result.len]
+		right := line[result.col+result.len:]
+
+		highlight := lipgloss.NewStyle().Bold(true).Reverse(true).Render
+		line = left + highlight(instance) + right
+		lines[result.row] = line
+
+		contents = strings.Join(lines, "\n")
+	}
+
+	m.viewport.SetContent(contents)
 }
 
 func (m model) View() string {
@@ -445,7 +489,7 @@ func (m model) scrollPercentageView() string {
 }
 
 func (m model) footerView() string {
-	margin := lipgloss.NewStyle().Margin(0, 1, 0, 1).Render // whole footer margin
+	margin := lipgloss.NewStyle().Margin(0, 1).Render // whole footer margin
 
 	scrollPct := m.scrollPercentageView()
 	leftWidth := m.windowWidth - lipgloss.Width(scrollPct) - 2
@@ -462,9 +506,13 @@ func (m model) footerView() string {
 		left = lipgloss.JoinVertical(lipgloss.Left,
 			m.searchbox.View()+"     "+searchState,
 			helpStyle(m.help.View(m.searchKeys)))
+	} else if len(m.search.results) > 0 {
+		left = lipgloss.JoinVertical(lipgloss.Left,
+			fmt.Sprintf("Found %d results for `%s'", len(m.search.results), m.searchbox.Value()),
+			helpStyle(m.help.View(m.keys)))
 	} else {
 		left = helpStyle(m.help.View(m.keys))
 	}
 
-	return margin(lipgloss.JoinHorizontal(lipgloss.Bottom, left, scrollPct))
+	return margin(lipgloss.JoinHorizontal(lipgloss.Bottom, left, scrollPct)) //+ "\n" + m.debug
 }
