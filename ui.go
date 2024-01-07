@@ -414,13 +414,13 @@ func (m *model) renderContents() {
 	navWidth := lipgloss.Width(m.sidebarView())
 	contentWidth := m.windowWidth - navWidth
 
-	oldLines := m.lines
-	_ = oldLines
-
 	contents := wordwrap.String(m.page.Render(contentWidth), contentWidth)
 	m.lines = strings.Split(contents, "\n")
 	lines := make([]string, len(m.lines))
 	copy(lines, m.lines)
+
+	yOffset := m.viewport.YOffset
+
 	if len(m.search.results) > 0 {
 		result := m.search.results[m.search.current]
 		m.debug = fmt.Sprintf("row[%d] col[%d]", result.row, result.col)
@@ -435,9 +435,12 @@ func (m *model) renderContents() {
 		lines[result.row] = line
 
 		contents = strings.Join(lines, "\n")
+
+		yOffset = result.row
 	}
 
 	m.viewport.SetContent(contents)
+	m.viewport.SetYOffset(yOffset)
 }
 
 func (m model) View() string {
