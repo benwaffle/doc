@@ -119,21 +119,42 @@ func (m manRef) Render(_ int) string {
 func (l list) Render(width int) string {
 	res := ""
 	maxTagWidth := 8
+	switch l.Typ {
+	case tagList:
+		maxTagWidth = l.Width + 1
+	case enumList:
+		maxTagWidth = 4
+	case itemList:
+		maxTagWidth = 0
+	default:
+		panic("Don't know how to render list")
+	}
+	indent := lipgloss.NewStyle().MarginLeft(l.Indent).Render
 	tagFillWidth := lipgloss.NewStyle().Width(maxTagWidth)
 	contentFillWidth := lipgloss.NewStyle().Width(width - maxTagWidth)
 	contentMargin := lipgloss.NewStyle().MarginLeft(maxTagWidth)
 
-	for _, item := range l.Items {
+	for i, item := range l.Items {
 		res += "\n"
 		if !l.Compact {
 			res += "\n"
 		}
 
 		tag := ""
-		for _, span := range item.Tag {
-			tag += span.Render(width)
+
+		switch l.Typ {
+		case tagList:
+			for _, span := range item.Tag {
+				tag += span.Render(width)
+			}
+			tag = strings.TrimSpace(tag)
+		case enumList:
+			tag = fmt.Sprintf("%2d. ", i+1)
+		case itemList:
+			// no tag
+		default:
+			panic(fmt.Sprintf("Don't know how to render %d list", l.Typ))
 		}
-		tag = strings.TrimSpace(tag)
 
 		contents := ""
 		for _, span := range item.Contents {
@@ -150,5 +171,5 @@ func (l list) Render(width int) string {
 			res += lipgloss.JoinHorizontal(lipgloss.Top, tag, contents)
 		}
 	}
-	return res
+	return indent(res)
 }

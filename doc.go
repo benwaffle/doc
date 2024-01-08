@@ -10,10 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/google/shlex"
 )
 
 type manPage struct {
@@ -81,9 +83,25 @@ type manRef struct {
 	Section *int
 }
 
+type listType int
+
+const (
+	bulletList listType = iota // Bullet item list
+	itemList                   // Unlabeled list
+	enumList                   // Enumerated list
+	tagList                    // Tag labeled list
+	diagList                   // Diagnostic list
+	hangList                   // Hanging labeled list
+	ohangList                  // Overhanging labeled list
+	insetList                  // Inset or run-on labeled list
+)
+
 type list struct {
+	Typ     listType
 	Items   []listItem
 	Compact bool
+	Width   int
+	Indent  int
 }
 
 type listItem struct {
@@ -409,10 +427,44 @@ func parseMdoc(doc string) manPage {
 			// not supported
 
 		case strings.HasPrefix(line, ".Bl"): // begin list
-			// TODO: parse list options
-			lists.Push(&list{
-				Compact: strings.Contains(line, "-compact"),
-			})
+			list := list{}
+
+			args, err := shlex.Split(line[4:])
+			if err != nil {
+				panic(err)
+			}
+			switch {
+			case slices.Contains(args, "-bullet"):
+				list.Typ = bulletList
+			case slices.Contains(args, "-enum"):
+				list.Typ = enumList
+			case slices.Contains(args, "-tag"):
+				list.Typ = tagList
+				widthIdx := slices.Index(args, "-width")
+				if widthIdx == -1 {
+					panic("missing -width argument to .Bl tag list")
+				}
+				list.Width = len(args[widthIdx+1])
+			case slices.Contains(args, "-diag"):
+				list.Typ = diagList
+			case slices.Contains(args, "-hang"):
+				list.Typ = hangList
+			case slices.Contains(args, "-ohang"):
+				list.Typ = ohangList
+			case slices.Contains(args, "-inset"):
+				list.Typ = insetList
+			default:
+				list.Typ = itemList
+			}
+			if i := slices.Index(args, "-offset"); i != -1 {
+				if args[i+1] == "indent" {
+					list.Indent = 6
+				}
+			}
+			if slices.Contains(args, "-compact") {
+				list.Compact = true
+			}
+			lists.Push(&list)
 
 		case strings.HasPrefix(line, ".It"): // list item
 			nextItem := listItem{}
