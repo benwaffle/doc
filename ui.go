@@ -55,6 +55,8 @@ type keyMap struct {
 	HalfPageDown key.Binding
 	Down         key.Binding
 	Up           key.Binding
+	Top          key.Binding
+	Bottom       key.Binding
 	Navigate     key.Binding
 	BeginSearch  key.Binding
 	Next         key.Binding
@@ -93,6 +95,14 @@ func defaultKeyMap() keyMap {
 		Down: key.NewBinding(
 			key.WithKeys("down", "j"),
 			key.WithHelp("↓/j", "down"),
+		),
+		Top: key.NewBinding(
+			key.WithKeys("g"),
+			key.WithHelp("g", "top"),
+		),
+		Bottom: key.NewBinding(
+			key.WithKeys("G"),
+			key.WithHelp("G", "bottom"),
 		),
 		Navigate: key.NewBinding(
 			key.WithKeys("tab"),
@@ -146,6 +156,9 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		}, {
 			k.Down,
 			k.Up,
+		}, {
+			k.Top,
+			k.Bottom,
 		}, {
 			k.Next,
 			k.Previous,
@@ -312,6 +325,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// 	m.viewport.LineDown(1)
 			// case key.Matches(msg, m.keys.Up):
 			// 	m.viewport.LineUp(1)
+			case key.Matches(msg, m.keys.Top):
+				m.viewport.GotoTop()
+			case key.Matches(msg, m.keys.Bottom):
+				m.viewport.GotoBottom()
 			case key.Matches(msg, m.keys.Help):
 				m.help.ShowAll = !m.help.ShowAll
 			case key.Matches(msg, m.keys.Navigate):
