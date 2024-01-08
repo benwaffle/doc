@@ -400,7 +400,7 @@ func parseMdoc(doc string) manPage {
 		case strings.HasPrefix(line, ".IP"): // indented paragraph
 			tag := ""
 			indent := 0
-		
+
 			if len(line) > 3 {
 				arg1, rest := nextToken(line[4:])
 				if arg1 == `\(bu` {
