@@ -398,24 +398,27 @@ func parseMdoc(doc string) manPage {
 			addSpans(parseLine(line[4:])...)
 
 		case strings.HasPrefix(line, ".IP"): // indented paragraph
-			arg1, rest := nextToken(line[4:])
 			tag := ""
-			if arg1 == `\(bu` {
-				tag = "•"
-			} else if arg1 == `\(em` {
-				tag = "—"
-			} else {
-				tag = arg1
-			}
-
-			arg2, _ := nextToken(rest)
 			indent := 0
-			if arg2 != "" {
-				indentVal, err := strconv.Atoi(arg2)
-				if err != nil {
-					panic(err)
+		
+			if len(line) > 3 {
+				arg1, rest := nextToken(line[4:])
+				if arg1 == `\(bu` {
+					tag = "•"
+				} else if arg1 == `\(em` {
+					tag = "—"
+				} else {
+					tag = arg1
 				}
-				indent = indentVal
+
+				arg2, _ := nextToken(rest)
+				if arg2 != "" {
+					indentVal, err := strconv.Atoi(arg2)
+					if err != nil {
+						panic(err)
+					}
+					indent = indentVal
+				}
 			}
 
 			addSpans(textSpan{tagPlain, "\n" + strings.Repeat("  ", indent) + tag, false})
