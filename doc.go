@@ -330,9 +330,10 @@ func parseMdoc(doc string) manPage {
 			page.Section = section
 
 		case strings.HasPrefix(line, ".TH"): // man page title
-			parts := strings.Split(line[4:], " ")
-			parts[0] = strings.Trim(parts[0], "\"")
-			parts[1] = strings.Trim(parts[1], "\"")
+			parts, err := shlex.Split(line[4:]) // use shlex to handle quoting
+			if err != nil {
+				panic(err)
+			}
 
 			page.Name = parts[0]
 			section, err := strconv.Atoi(parts[1])
@@ -341,7 +342,7 @@ func parseMdoc(doc string) manPage {
 			}
 			page.Section = section
 			page.Date = parts[2]
-			page.Extra = parts[3] + " " + parts[4]
+			page.Extra = strings.Join(parts[3:], " ")
 
 		case strings.HasPrefix(line, ".Sh") || strings.HasPrefix(line, ".SH"): // section header
 			if currentSection != nil {
