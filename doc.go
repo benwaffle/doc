@@ -290,9 +290,9 @@ tokenizer:
 }
 
 func parseMdoc(doc string) manPage {
-	mdocTitle, _ := regexp.Compile(`\.Dt ([A-Z_]+) (\d+)`) // .Dt macro
-	xr, _ := regexp.Compile(`\.Xr (\S+)(?: (\d+))?`)       // .Xr macro
-	nameFull, _ := regexp.Compile(`\.Nm (\S+)(?: (\S+))?`) // .Nm macro
+	mdocTitle, _ := regexp.Compile(`\.Dt ([A-Za-z_]+) (\d+)`) // .Dt macro
+	xr, _ := regexp.Compile(`\.Xr (\S+)(?: (\d+))?`)          // .Xr macro
+	nameFull, _ := regexp.Compile(`\.Nm (\S+)(?: (\S+))?`)    // .Nm macro
 	savedName := ""
 
 	page := manPage{}
@@ -307,7 +307,7 @@ func parseMdoc(doc string) manPage {
 		} else if currentSection != nil {
 			currentSection.Contents = append(currentSection.Contents, spans...)
 		} else {
-			panic("no current section")
+			panic(fmt.Sprintf("can't add [%+v], no current section", spans))
 		}
 	}
 
