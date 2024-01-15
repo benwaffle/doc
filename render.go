@@ -127,7 +127,7 @@ func (l list) Render(width int) string {
 	case itemList:
 		maxTagWidth = 0
 	default:
-		panic("Don't know how to render list")
+		panic(fmt.Sprintf("Don't know how to render %d list", l.Typ))
 	}
 	indent := lipgloss.NewStyle().MarginLeft(l.Indent).Render
 	tagFillWidth := lipgloss.NewStyle().Width(maxTagWidth)
