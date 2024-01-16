@@ -109,9 +109,29 @@ type listItem struct {
 	Contents []Span
 }
 
+type font int
+
+const (
+	fontPlain font = iota // Roman
+	fontBold
+	fontItalic
+)
+
+type parser struct {
+	lastFont    font
+	currentFont font
+}
+
 func nextToken(input string) (string, string) {
+	if len(input) == 0 {
+		return "", ""
+	}
 	if input[0] == '\\' { // escape sequence, like \fB for bold
-		return input[:2], input[2:]
+		if input[1] == 'f' { // \fR, \fB, \fP, or \fI. TODO: handle \f[BI]
+			return input[:3], input[3:]
+		} else { // \- for example
+			return input[:2], input[2:]
+		}
 	}
 
 	for i, c := range input {
@@ -124,7 +144,7 @@ func nextToken(input string) (string, string) {
 	return input, ""
 }
 
-func parseLine(line string) []Span {
+func (p *parser) parseLine(line string) []Span {
 	if line == "" {
 		return nil
 	}
@@ -136,6 +156,10 @@ func parseLine(line string) []Span {
 tokenizer:
 	for {
 		token, rest := nextToken(line)
+		if token == "" && len(rest) > 0 { // eat spaces
+			line = rest
+			continue
+		}
 		switch token {
 		case "Fl": // command line flag with dash
 			flag, rest := nextToken(rest)
@@ -247,20 +271,41 @@ tokenizer:
 			}
 			line = rest
 		case "Ql": // quoted literal
-			res = append(res, decoratedSpan{decorationQuotedLiteral, parseLine(rest)})
+			res = append(res, decoratedSpan{decorationQuotedLiteral, p.parseLine(rest)})
 			break tokenizer
 		case "Pq": // parens
-			res = append(res, decoratedSpan{decorationParens, parseLine(rest)})
+			res = append(res, decoratedSpan{decorationParens, p.parseLine(rest)})
 			break tokenizer
 		case "Sq": // single quote
-			res = append(res, decoratedSpan{decorationSingleQuote, parseLine(rest)})
+			res = append(res, decoratedSpan{decorationSingleQuote, p.parseLine(rest)})
 			break tokenizer
 		case "Dq": // double quote
-			res = append(res, decoratedSpan{decorationDoubleQuote, parseLine(rest)})
+			res = append(res, decoratedSpan{decorationDoubleQuote, p.parseLine(rest)})
 			break tokenizer
 		case "Op": // optional
-			res = append(res, decoratedSpan{decorationOptional, parseLine(rest)})
+			res = append(res, decoratedSpan{decorationOptional, p.parseLine(rest)})
 			break tokenizer
+
+		// escape sequences
+		case "\\fB": // bold
+			p.lastFont = p.currentFont
+			p.currentFont = fontBold
+			line = rest
+		case "\\fI": // italic
+			p.lastFont = p.currentFont
+			p.currentFont = fontItalic
+			line = rest
+		case "\\fR": // plain text (roman)
+			p.lastFont = p.currentFont
+			p.currentFont = fontPlain
+			line = rest
+		case "\\fP": // use previous font
+			p.currentFont = p.lastFont
+			line = rest
+		case "\\-":
+			res = append(res, textSpan{tagPlain, "-", true})
+			line = rest
+
 		case ",", "|":
 			res = append(res, textSpan{tagPlain, token, false})
 			line = rest
@@ -272,7 +317,18 @@ tokenizer:
 				line = lastMacro + " " + line
 				repeatMacro = false
 			} else {
-				res = append(res, textSpan{tagPlain, token, false})
+				style := tagPlain
+				switch p.currentFont {
+				case fontPlain:
+					style = tagPlain
+				case fontBold:
+					style = tagBold
+				case fontItalic:
+					style = tagItalic
+				default:
+					panic(fmt.Sprintf("unknown font %d", p.currentFont))
+				}
+				res = append(res, textSpan{style, token, false})
 				line = rest
 			}
 		}
@@ -281,7 +337,7 @@ tokenizer:
 	return res
 }
 
-func parseMdoc(doc string) manPage {
+func (p *parser) parseMdoc(doc string) manPage {
 	mdocTitle, _ := regexp.Compile(`\.Dt ([A-Za-z_]+) (\d+)`) // .Dt macro
 	xr, _ := regexp.Compile(`\.Xr (\S+)(?: (\d+))?`)          // .Xr macro
 	nameFull, _ := regexp.Compile(`\.Nm (\S+)(?: (\S+))?`)    // .Nm macro
@@ -388,7 +444,7 @@ func parseMdoc(doc string) manPage {
 
 		case strings.HasPrefix(line, ".Dl"): // indented literal
 			addSpans(textSpan{tagPlain, "\t", false})
-			addSpans(parseLine(line[4:])...)
+			addSpans(p.parseLine(line[4:])...)
 
 		case strings.HasPrefix(line, ".IP"): // indented paragraph
 			tag := ""
@@ -465,7 +521,7 @@ func parseMdoc(doc string) manPage {
 		case strings.HasPrefix(line, ".It"): // list item
 			nextItem := listItem{}
 			if len(line) > 4 {
-				nextItem.Tag = parseLine(line[4:])
+				nextItem.Tag = p.parseLine(line[4:])
 			}
 			lists.Peek().Items = append(lists.Peek().Items, nextItem)
 
@@ -486,10 +542,10 @@ func parseMdoc(doc string) manPage {
 			// ignore
 
 		case strings.HasPrefix(line, "."):
-			addSpans(parseLine(line[1:])...)
+			addSpans(p.parseLine(line[1:])...)
 
 		default:
-			addSpans(parseLine(line)...)
+			addSpans(p.parseLine(line)...)
 
 		}
 	}
@@ -583,7 +639,8 @@ func main() {
 		panic(err)
 	}
 
-	page := parseMdoc(data)
+	parser := parser{}
+	page := parser.parseMdoc(data)
 
 	dumpAst(page)
 
