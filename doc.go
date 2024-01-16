@@ -537,6 +537,15 @@ func (p *parser) parseMdoc(doc string) manPage {
 		case line == ".br":
 			addSpans(textSpan{tagPlain, "\n", false})
 
+		case line == ".na":
+			// TODO: something around justification. "Ragged-right text"
+
+		case line == ".nh":
+			// TODO: disable hyphenation
+
+		case strings.HasPrefix(line, ".nr"):
+			// TODO: new register
+
 		case line == "." || line == "":
 			// ignore
 
