@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -553,32 +552,53 @@ func (p *parser) parseMdoc(doc string) manPage {
 	return page
 }
 
-func findDocInDir(target string, dir string) string {
-	var foundPath string
-	filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		name := filepath.Base(path)
-		dir := filepath.Base(filepath.Dir(path))
-		section := strings.TrimPrefix(dir, "man")
+func findDocInManSection(sectionDir, target string) string {
+	section := strings.TrimPrefix(filepath.Base(sectionDir), "man")
+	fullTarget := fmt.Sprintf("%s.%s", target, section)
+	fullTargetGz := fmt.Sprintf("%s.%s.gz", target, section)
 
-		if name == fmt.Sprintf("%s.%s", target, section) || name == fmt.Sprintf("%s.%s.gz", target, section) {
-			foundPath = path
-			return filepath.SkipAll
+	files, err := os.ReadDir(sectionDir)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, file := range files {
+		if file.Name() == fullTarget || file.Name() == fullTargetGz {
+			return sectionDir + "/" + file.Name()
 		}
+	}
+	return ""
+}
 
-		return nil
-	})
-	return foundPath
+func findDocInManDir(mandir, target string) string {
+	dirs, err := os.ReadDir(mandir)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, dir := range dirs {
+		if strings.HasPrefix(dir.Name(), "man") {
+			path := findDocInManSection(mandir+"/"+dir.Name(), target)
+			if path != "" {
+				return path
+			}
+		}
+	}
+	return ""
 }
 
 func findDoc(target string) string {
 	manPath := os.Getenv("MANPATH")
-	for _, dir := range strings.Split(manPath, ":") {
-		path := findDocInDir(target, dir)
-		if path != "" {
-			return path
+	if len(manPath) > 0 {
+		for _, dir := range strings.Split(manPath, ":") {
+			path := findDocInManDir(dir, target)
+			if path != "" {
+				return path
+			}
 		}
 	}
-	return findDocInDir(target, "/usr/share/man")
+	// TODO: locale support
+	return findDocInManDir("/usr/share/man", target)
 }
 
 func readManPage(path string) (string, error) {
