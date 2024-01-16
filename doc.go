@@ -110,15 +110,18 @@ type listItem struct {
 }
 
 func nextToken(input string) (string, string) {
-	space := strings.Index(input, " ")
-	if space == -1 {
-		return input, ""
+	if input[0] == '\\' { // escape sequence, like \fB for bold
+		return input[:2], input[2:]
 	}
-	next := space + 1
-	for next < len(input) && input[next] == ' ' {
-		next++
+
+	for i, c := range input {
+		if c == '\\' {
+			return input[:i], input[i:]
+		} else if c == ' ' {
+			return input[:i], input[i+1:]
+		}
 	}
-	return input[:space], input[next:]
+	return input, ""
 }
 
 func parseLine(line string) []Span {
