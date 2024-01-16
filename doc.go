@@ -302,8 +302,8 @@ tokenizer:
 		case "\\fP": // use previous font
 			p.currentFont = p.lastFont
 			line = rest
-		case "\\-":
-			res = append(res, textSpan{tagPlain, "-", true})
+		case "\\-", "\\,", "\\/":
+			res = append(res, textSpan{tagPlain, token[1:2], true})
 			line = rest
 
 		case ",", "|":
