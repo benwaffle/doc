@@ -446,7 +446,8 @@ func (p *parser) parseMdoc(doc string) manPage {
 			addSpans(manRef{name, section})
 
 		case strings.HasPrefix(line, ".Ss") || strings.HasPrefix(line, ".SS"): // subsection header
-			addSpans(textSpan{tagSubsectionHeader, line[4:], true})
+			header := strings.Trim(line[4:], "\"")
+			addSpans(textSpan{tagSubsectionHeader, header, true})
 
 		case strings.HasPrefix(line, ".Dl"): // indented literal
 			addSpans(textSpan{tagPlain, "\t", false})
