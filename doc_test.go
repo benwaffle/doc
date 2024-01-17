@@ -24,6 +24,7 @@ func TestNextToken(t *testing.T) {
 		{`hel\fBlo\fR`, "hel", `\fBlo\fR`},
 		{`\fBhello`, `\fB`, "hello"},
 		{`\-\- ok`, `--`, `ok`},
+		{`"\-b\fIn\fP or \-\-buffers=\fIn\fP"`, `-b\fIn\fP or --buffers=\fIn\fP`, ""},
 	}
 
 	for _, test := range tests {
