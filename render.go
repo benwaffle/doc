@@ -122,6 +122,8 @@ func (l list) Render(width int) string {
 	switch l.Typ {
 	case tagList:
 		maxTagWidth = l.Width + 1
+	case ohangList:
+		maxTagWidth = 0
 	case enumList:
 		maxTagWidth = 4
 	case itemList:
@@ -143,7 +145,7 @@ func (l list) Render(width int) string {
 		tag := ""
 
 		switch l.Typ {
-		case tagList:
+		case tagList, ohangList:
 			for _, span := range item.Tag {
 				tag += span.Render(width)
 			}
