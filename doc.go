@@ -462,6 +462,7 @@ func (p *parser) parseMdoc(doc string) manPage {
 		case strings.HasPrefix(line, ".IP"): // indented paragraph
 			tag := ""
 			indent := 0
+			maxWidth := 8
 
 			if len(line) > 3 {
 				arg1, rest := nextToken(line[4:])
@@ -484,6 +485,9 @@ func (p *parser) parseMdoc(doc string) manPage {
 			}
 
 			addSpans(textSpan{tagPlain, "\n" + strings.Repeat("  ", indent) + tag, false})
+			if indent+len(tag)+1 > maxWidth {
+				addSpans(textSpan{tagPlain, "\n" + strings.Repeat(" ", maxWidth), false}) // TODO: proper IP support, like Bl
+			}
 
 		case strings.HasPrefix(line, ".TP"):
 			addSpans(textSpan{tagPlain, "\n", false})
