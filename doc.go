@@ -133,11 +133,17 @@ func nextToken(input string) (string, string) {
 		}
 	}
 
+	inQuote := false
+
 	for i, c := range input {
-		if c == '\\' {
+		if c == '"' && !inQuote { // start quoted words
+			inQuote = true
+		} else if c == '"' && inQuote { // end quoted words
+			inQuote = false
+		} else if c == '\\' {
 			return input[:i], input[i:]
-		} else if c == ' ' {
-			return input[:i], input[i+1:]
+		} else if c == ' ' && !inQuote {
+			return strings.Trim(input[:i], "\" "), input[i+1:]
 		}
 	}
 	return input, ""

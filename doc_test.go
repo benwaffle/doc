@@ -19,6 +19,7 @@ func TestNextToken(t *testing.T) {
 		{"man ,", "man", ","},
 
 		{"normal\\fBbold", "normal", "\\fBbold"},
+		{"\"quoted words\" are handled", "quoted words", "are handled"},
 	}
 
 	for _, test := range tests {
@@ -28,7 +29,7 @@ func TestNextToken(t *testing.T) {
 				t.Errorf("nextToken(%q) = [%q, %q] wanted token %q", test.line, token, rest, test.token)
 			}
 			if rest != test.rest {
-				t.Errorf("nextToken(%q) = [%q, %q] wanted rest %q", test.line, token, rest, test.token)
+				t.Errorf("nextToken(%q) = [%q, %q] wanted rest %q", test.line, token, rest, test.rest)
 			}
 		})
 	}
