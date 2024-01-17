@@ -121,32 +121,38 @@ type parser struct {
 	currentFont font
 }
 
+func parseError(line int, info string, err error) error {
+	return fmt.Errorf("Error parsing %s on line %d: %w", info, line, err)
+}
+
 func nextToken(input string) (string, string) {
 	if len(input) == 0 {
 		return "", ""
 	}
-	if input[0] == '\\' { // escape sequence, like \fB for bold
-		if input[1] == 'f' { // \fR, \fB, \fP, or \fI. TODO: handle \f[BI]
-			return input[:3], input[3:]
-		} else { // \- for example
-			return input[:2], input[2:]
-		}
-	}
 
 	inQuote := false
+	token := ""
 
 	for i, c := range input {
-		if c == '"' && !inQuote { // start quoted words
+		if c == '\\' && input[i+1] == 'f' { // font sequence, this will be the next token
+			if i == 0 {
+				return input[:3], input[3:] // \fX is the current token
+			} else {
+				return token, input[i:] // \fX will be the next token
+			}
+		} else if c == '\\' {
+			// don't add \
+		} else if c == '"' && !inQuote { // start quoted words
 			inQuote = true
 		} else if c == '"' && inQuote { // end quoted words
 			inQuote = false
-		} else if c == '\\' {
-			return input[:i], input[i:]
 		} else if c == ' ' && !inQuote {
-			return strings.Trim(input[:i], "\" "), input[i+1:]
+			return token, input[i+1:]
+		} else {
+			token += string(c)
 		}
 	}
-	return input, ""
+	return token, ""
 }
 
 func (p *parser) parseLine(line string) []Span {
@@ -364,7 +370,7 @@ func (p *parser) parseMdoc(doc string) manPage {
 		}
 	}
 
-	for _, line := range strings.Split(doc, "\n") {
+	for lineNo, line := range strings.Split(doc, "\n") {
 		switch {
 
 		case strings.HasPrefix(line, ".\\\"") || strings.HasPrefix(line, "'\\\""): // commenr
@@ -469,7 +475,7 @@ func (p *parser) parseMdoc(doc string) manPage {
 				if arg2 != "" {
 					indentVal, err := strconv.Atoi(arg2)
 					if err != nil {
-						panic(err)
+						panic(parseError(lineNo+1, arg2, err))
 					}
 					indent = indentVal
 				}

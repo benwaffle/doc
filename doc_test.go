@@ -18,8 +18,12 @@ func TestNextToken(t *testing.T) {
 		{"Ar man ,", "Ar", "man ,"},
 		{"man ,", "man", ","},
 
-		{"normal\\fBbold", "normal", "\\fBbold"},
-		{"\"quoted words\" are handled", "quoted words", "are handled"},
+		{`normal\fBbold`, "normal", `\fBbold`},
+		{`"quoted words" are handled`, "quoted words", "are handled"},
+
+		{`hel\fBlo\fR`, "hel", `\fBlo\fR`},
+		{`\fBhello`, `\fB`, "hello"},
+		{`\-\- ok`, `--`, `ok`},
 	}
 
 	for _, test := range tests {
