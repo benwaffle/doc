@@ -118,6 +118,47 @@ func parseError(line int, info string, err error) error {
 	return fmt.Errorf("Error parsing %s on line %d: %w", info, line, err)
 }
 
+// Merge adjacent spans if possible. This makes ast.json much easier to read.
+func (page *manPage) mergeSpans() {
+	for i, section := range page.Sections {
+
+		var contents []Span
+		var merged *textSpan = nil // accumulator
+		for _, span := range section.Contents {
+
+			if merged == nil { // new range
+				if ts, ok := span.(textSpan); ok {
+					merged = &ts
+				}
+			} else { // try merge
+				// TODO: merge list contents
+				if next, ok := span.(textSpan); ok && next.Typ == merged.Typ && next.NoSpace == merged.NoSpace { // ok to merge
+					mergedText := merged.Text
+					if !next.NoSpace {
+						mergedText += " "
+					}
+					mergedText += next.Text
+					merged = &textSpan{
+						Typ:     merged.Typ,
+						Text:    mergedText,
+						NoSpace: merged.NoSpace,
+					}
+				} else { // no match, don't merge
+					contents = append(contents, *merged, span)
+					merged = nil
+				}
+			}
+
+		}
+		if merged != nil {
+			contents = append(contents, merged)
+		}
+		section.Contents = contents
+		page.Sections[i] = section
+
+	}
+}
+
 func nextToken(input string) (string, string) {
 	if len(input) == 0 {
 		return "", ""

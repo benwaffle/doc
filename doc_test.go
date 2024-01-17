@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestNextToken(t *testing.T) {
 	tests := []struct {
@@ -38,4 +41,28 @@ func TestNextToken(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMerge(t *testing.T) {
+	page := manPage{
+		Sections: []section{
+			{
+				Contents: []Span{
+					textSpan{Typ: tagPlain, Text: "hello"},
+					textSpan{Typ: tagPlain, Text: "world"},
+					textSpan{Typ: tagPlain, Text: "man"},
+					textSpan{Typ: tagBold, Text: "bold"},
+				},
+			},
+		},
+	}
+	page.mergeSpans()
+	expected := []Span{
+		textSpan{Typ: tagPlain, Text: "hello world man"},
+		textSpan{Typ: tagBold, Text: "bold"},
+	}
+	if !slices.Equal(page.Sections[0].Contents, expected) {
+		t.Errorf("%+v did not equal %+v", page.Sections[0].Contents, expected)
+	}
+
 }

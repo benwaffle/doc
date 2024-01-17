@@ -125,7 +125,7 @@ func main() {
 
 	parser := parser{}
 	page := parser.parseMdoc(data)
-
+	page.mergeSpans()
 	dumpAst(page)
 
 	p := tea.NewProgram(
