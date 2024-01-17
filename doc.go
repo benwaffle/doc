@@ -127,7 +127,7 @@ func nextToken(input string) (string, string) {
 	token := ""
 
 	for i, c := range input {
-		if c == '\\' && input[i+1] == 'f' { // font sequence, this will be the next token
+		if c == '\\' && i+1 < len(input) && input[i+1] == 'f' { // font sequence, this will be the next token
 			if inQuote {
 				token += "\\"
 			} else if i == 0 {
