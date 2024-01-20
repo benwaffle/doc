@@ -124,6 +124,8 @@ func (l list) Render(width int) string {
 	res := ""
 	maxTagWidth := 8
 	switch l.Typ {
+	case bulletList, dashList:
+		maxTagWidth = 2
 	case tagList:
 		maxTagWidth = l.Width + 1
 	case ohangList:
@@ -154,6 +156,10 @@ func (l list) Render(width int) string {
 				tag += span.Render(width)
 			}
 			tag = strings.TrimSpace(tag)
+		case bulletList:
+			tag = "• "
+		case dashList:
+			tag = "- "
 		case enumList:
 			tag = fmt.Sprintf("%2d. ", i+1)
 		case itemList:

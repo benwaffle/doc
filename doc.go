@@ -78,6 +78,7 @@ type listType int
 
 const (
 	bulletList listType = iota // Bullet item list
+	dashList                   // Hyphenated list
 	itemList                   // Unlabeled list
 	enumList                   // Enumerated list
 	tagList                    // Tag labeled list
@@ -544,6 +545,8 @@ func (p *parser) parseMdoc(doc string) manPage {
 				switch arg {
 				case "-bullet":
 					list.Typ = bulletList
+				case "-dash":
+					list.Typ = dashList
 				case "-enum":
 					list.Typ = enumList
 				case "-tag":
