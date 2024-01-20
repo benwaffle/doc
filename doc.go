@@ -123,12 +123,14 @@ func (page *manPage) mergeSpans() {
 	for i, section := range page.Sections {
 
 		var contents []Span
-		var merged *textSpan = nil // accumulator
+		var merged *textSpan = nil
 		for _, span := range section.Contents {
 
 			if merged == nil { // new range
 				if ts, ok := span.(textSpan); ok {
 					merged = &ts
+				} else {
+					contents = append(contents, span)
 				}
 			} else { // try merge
 				// TODO: merge list contents
