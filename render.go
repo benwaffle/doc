@@ -117,6 +117,10 @@ func (m manRef) Render(_ int) string {
 }
 
 func (l list) Render(width int) string {
+	if l.Typ == columnList {
+		return l.RenderTable(width)
+	}
+
 	res := ""
 	maxTagWidth := 8
 	switch l.Typ {
@@ -174,4 +178,8 @@ func (l list) Render(width int) string {
 		}
 	}
 	return indent(res)
+}
+
+func (l list) RenderTable(width int) string {
+	return fmt.Sprint(l.Columns)
 }

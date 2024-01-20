@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -86,6 +85,7 @@ const (
 	hangList                   // Hanging labeled list
 	ohangList                  // Overhanging labeled list
 	insetList                  // Inset or run-on labeled list
+	columnList                 // Columnar list (table)
 )
 
 type list struct {
@@ -93,6 +93,7 @@ type list struct {
 	Items   []listItem
 	Compact bool
 	Width   int
+	Columns []string
 	Indent  int
 }
 
@@ -539,36 +540,38 @@ func (p *parser) parseMdoc(doc string) manPage {
 			if err != nil {
 				panic(err)
 			}
-			switch {
-			case slices.Contains(args, "-bullet"):
-				list.Typ = bulletList
-			case slices.Contains(args, "-enum"):
-				list.Typ = enumList
-			case slices.Contains(args, "-tag"):
-				list.Typ = tagList
-				widthIdx := slices.Index(args, "-width")
-				if widthIdx == -1 {
-					panic("missing -width argument to .Bl tag list")
+			for i, arg := range args {
+				switch arg {
+				case "-bullet":
+					list.Typ = bulletList
+				case "-enum":
+					list.Typ = enumList
+				case "-tag":
+					list.Typ = tagList
+				case "-diag":
+					list.Typ = diagList
+				case "-hang":
+					list.Typ = hangList
+				case "-ohang":
+					list.Typ = ohangList
+				case "-inset":
+					list.Typ = insetList
+				case "-column":
+					list.Typ = columnList
+				case "-width":
+					list.Width = len(args[i+1])
+				case "-compact":
+					list.Compact = true
+				case "-offset":
+					// TODO: handle left, center, indent, indent-two, right
+				default:
+					if list.Typ == columnList {
+						list.Columns = append(list.Columns, arg)
+					}
 				}
-				list.Width = len(args[widthIdx+1])
-			case slices.Contains(args, "-diag"):
-				list.Typ = diagList
-			case slices.Contains(args, "-hang"):
-				list.Typ = hangList
-			case slices.Contains(args, "-ohang"):
-				list.Typ = ohangList
-			case slices.Contains(args, "-inset"):
-				list.Typ = insetList
-			default:
-				list.Typ = itemList
 			}
-			if i := slices.Index(args, "-offset"); i != -1 {
-				if args[i+1] == "indent" {
-					list.Indent = 6
-				}
-			}
-			if slices.Contains(args, "-compact") {
-				list.Compact = true
+			if list.Typ == tagList && list.Width == 0 {
+				panic("missing -width argument to .Bl tag list")
 			}
 			lists.Push(&list)
 
