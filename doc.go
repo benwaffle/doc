@@ -218,7 +218,7 @@ tokenizer:
 			res = append(res, flagSpan{flag, true, false})
 			line = rest
 			lastMacro = "Fl"
-		case "Cm": // command line something with no dash
+		case "Cm", "Ic": // command line something with no dash
 			flag, rest := nextToken(rest)
 			res = append(res, flagSpan{flag, false, false})
 			line = rest
