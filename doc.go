@@ -34,7 +34,6 @@ const (
 	tagSubsectionHeader
 	tagLiteral
 	tagSymbolic
-	tagStandard
 	tagBold
 	tagItalic
 	tagUnderline
@@ -74,6 +73,10 @@ type flagSpan struct {
 type manRef struct {
 	Name    string
 	Section *int
+}
+
+type standardRef struct {
+	Standard string
 }
 
 type listType int
@@ -259,7 +262,7 @@ tokenizer:
 			lastMacro = "Li"
 		case "St": // standard
 			standard, rest := nextToken(rest)
-			res = append(res, textSpan{tagStandard, standard, false})
+			res = append(res, standardRef{standard})
 			line = rest
 			lastMacro = "St"
 		case "Ta": // table cell separator

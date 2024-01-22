@@ -47,7 +47,6 @@ var textStyles = map[textTag]lipgloss.Style{
 		Bold(true).
 		Margin(2, 0, 0, 0),
 	tagSymbolic:  lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
-	tagStandard:  lipgloss.NewStyle().Foreground(lipgloss.Color("12")),
 	tagBold:      lipgloss.NewStyle().Bold(true),
 	tagItalic:    lipgloss.NewStyle().Italic(true),
 	tagUnderline: lipgloss.NewStyle().Underline(true),
@@ -116,6 +115,107 @@ func (m manRef) Render(_ int) string {
 		res += fmt.Sprintf("(%d)", *m.Section)
 	}
 	return res
+}
+
+var standardStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
+
+func (std standardRef) Render(width int) string {
+	res := ""
+	switch std.Standard {
+	case "-ansiC":
+		res = `ANSI X3.159-1989 (“ANSI C89”)`
+	case "-ansiC-89":
+		res = `ANSI X3.159-1989 (“ANSI C89”)`
+	case "-isoC":
+		res = `ISO/IEC 9899:1990 (“ISO C90”)`
+	case "-isoC-90":
+		res = `ISO/IEC 9899:1990 (“ISO C90”)`
+	case "-isoC-amd1":
+		res = `ISO/IEC 9899/AMD1:1995 (“ISO C90, Amendment 1”)`
+	case "-isoC-tcor1":
+		res = `ISO/IEC 9899/TCOR1:1994 (“ISO C90, Technical Corrigendum 1”)`
+	case "-isoC-tcor2":
+		res = `ISO/IEC 9899/TCOR2:1995 (“ISO C90, Technical Corrigendum 2”)`
+	case "-isoC-99":
+		res = `ISO/IEC 9899:1999 (“ISO C99”)`
+	case "-isoC-2011":
+		res = `ISO/IEC 9899:2011 (“ISO C11”)`
+	case "-p1003.1-88":
+		res = `IEEE Std 1003.1-1988 (“POSIX.1”)`
+	case "-p1003.1":
+		res = `IEEE Std 1003.1 (“POSIX.1”)`
+	case "-p1003.1-90":
+		res = `IEEE Std 1003.1-1990 (“POSIX.1”)`
+	case "-iso9945-1-90":
+		res = `ISO/IEC 9945-1:1990 (“POSIX.1”)`
+	case "-p1003.1b-93":
+		res = `IEEE Std 1003.1b-1993 (“POSIX.1b”)`
+	case "-p1003.1b":
+		res = `IEEE Std 1003.1b (“POSIX.1b”)`
+	case "-p1003.1c-95":
+		res = `IEEE Std 1003.1c-1995 (“POSIX.1c”)`
+	case "-p1003.1i-95":
+		res = `IEEE Std 1003.1i-1995 (“POSIX.1i”)`
+	case "-p1003.1-96":
+		res = `ISO/IEC 9945-1:1996 (“POSIX.1”)`
+	case "-iso9945-1-96":
+		res = `ISO/IEC 9945-1:1996 (“POSIX.1”)`
+	case "-p1003.2":
+		res = `IEEE Std 1003.2 (“POSIX.2”)`
+	case "-p1003.2-92":
+		res = `IEEE Std 1003.2-1992 (“POSIX.2”)`
+	case "-iso9945-2-93":
+		res = `ISO/IEC 9945-2:1993 (“POSIX.2”)`
+	case "-p1003.2a-92":
+		res = `IEEE Std 1003.2a-1992 (“POSIX.2”)`
+	case "-xpg4":
+		res = `X/Open Portability Guide Issue 4 (“XPG4”)`
+	case "-susv1":
+		res = `Version 1 of the Single UNIX Specification (“SUSv1”)`
+	case "-xpg4.2":
+		res = `X/Open Portability Guide Issue 4, Version 2 (“XPG4.2”)`
+	case "-xsh4.2":
+		res = `X/Open System Interfaces and Headers Issue 4, Version 2 (“XSH4.2”)`
+	case "-xcurses4.2":
+		res = `X/Open Curses Issue 4, Version 2 (“XCURSES4.2”)`
+	case "-p1003.1g-2000":
+		res = `IEEE Std 1003.1g-2000 (“POSIX.1g”)`
+	case "-svid4":
+		res = `System V Interface Definition, Fourth Edition (“SVID4”),`
+	case "-susv2":
+		res = `Version 2 of the Single UNIX Specification (“SUSv2”)`
+	case "-xbd5":
+		res = `X/Open Base Definitions Issue 5 (“XBD5”)`
+	case "-xsh5":
+		res = `X/Open System Interfaces and Headers Issue 5 (“XSH5”)`
+	case "-xcu5":
+		res = `X/Open Commands and Utilities Issue 5 (“XCU5”)`
+	case "-xns5":
+		res = `X/Open Networking Services Issue 5 (“XNS5”)`
+	case "-xns5.2":
+		res = `X/Open Networking Services Issue 5.2 (“XNS5.2”)`
+	case "-p1003.1-2001":
+		res = `IEEE Std 1003.1-2001 (“POSIX.1”)`
+	case "-susv3":
+		res = `Version 3 of the Single UNIX Specification (“SUSv3”)`
+	case "-p1003.1-2004":
+		res = `IEEE Std 1003.1-2004 (“POSIX.1”)`
+	case "-p1003.1-2008":
+		res = `IEEE Std 1003.1-2008 (“POSIX.1”)`
+	case "-susv4":
+		res = `Version 4 of the Single UNIX Specification (“SUSv4”)`
+	case "-ieee754":
+		res = `IEEE Std 754-1985`
+	case "-iso8601":
+		res = `ISO 8601`
+	case "-iso8802-3":
+		res = `ISO 8802-3: 1989`
+	case "-ieee1275-94":
+		res = `IEEE Std 1275-1994 (“Open Firmware”)`
+	default:
+		res = std.Standard
+	}
+	return standardStyle.Render(res)
 }
 
 func (l list) Render(width int) string {
