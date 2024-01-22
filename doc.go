@@ -37,6 +37,7 @@ const (
 	tagStandard
 	tagBold
 	tagItalic
+	tagUnderline
 	tagSingleQuote
 	tagDoubleQuote
 	tagTableCellSeparator
@@ -280,6 +281,11 @@ tokenizer:
 			res = append(res, textSpan{tagItalic, italic, false})
 			line = rest
 			lastMacro = "I"
+		case "Em": // emphasis or underline
+			em, rest := nextToken(rest)
+			res = append(res, textSpan{tagUnderline, em, false})
+			line = rest
+			lastMacro = "Em"
 		case "BR": // alternate bold and normal
 			bold, rest := nextToken(rest)
 			if bold != "" {

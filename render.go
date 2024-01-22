@@ -46,11 +46,12 @@ var textStyles = map[textTag]lipgloss.Style{
 	tagSubsectionHeader: lipgloss.NewStyle().
 		Bold(true).
 		Margin(2, 0, 0, 0),
-	tagSymbolic: lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
-	tagStandard: lipgloss.NewStyle().Foreground(lipgloss.Color("12")),
-	tagBold:     lipgloss.NewStyle().Bold(true),
-	tagItalic:   lipgloss.NewStyle().Italic(true),
-	tagLiteral:  lipgloss.NewStyle(),
+	tagSymbolic:  lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
+	tagStandard:  lipgloss.NewStyle().Foreground(lipgloss.Color("12")),
+	tagBold:      lipgloss.NewStyle().Bold(true),
+	tagItalic:    lipgloss.NewStyle().Italic(true),
+	tagUnderline: lipgloss.NewStyle().Underline(true),
+	tagLiteral:   lipgloss.NewStyle(),
 }
 
 func (t textSpan) Render(_ int) string {
