@@ -39,6 +39,7 @@ const (
 	tagItalic
 	tagSingleQuote
 	tagDoubleQuote
+	tagTableCellSeparator
 )
 
 type textSpan struct {
@@ -260,6 +261,15 @@ tokenizer:
 			res = append(res, textSpan{tagStandard, standard, false})
 			line = rest
 			lastMacro = "St"
+		case "Ta": // table cell separator
+			res = append(res, textSpan{tagTableCellSeparator, "", false})
+			line = rest
+			lastMacro = "Ta"
+		case "No": // no format
+			no, rest := nextToken(rest)
+			res = append(res, textSpan{tagPlain, no, false})
+			line = rest
+			lastMacro = "No"
 		case "B": // bold
 			bold, rest := nextToken(rest)
 			res = append(res, textSpan{tagBold, bold, false})

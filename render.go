@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -170,7 +171,7 @@ func (l list) Render(width int) string {
 
 		contents := ""
 		for _, span := range item.Contents {
-			contents += span.Render(width)
+			contents += span.Render(width - maxTagWidth)
 		}
 		contents = contentFillWidth.Render(contents)
 
@@ -187,5 +188,59 @@ func (l list) Render(width int) string {
 }
 
 func (l list) RenderTable(width int) string {
-	return fmt.Sprint(l.Columns)
+	var columns []table.Column
+	var rows []table.Row
+
+	for i, col := range l.Columns {
+		colWidth := len(col) + 3 // +2 for padding, not sure why 3 is needed
+		if i == len(l.Columns)-1 {
+			// compute remaining width
+			colWidth = width
+			for _, col := range columns {
+				colWidth -= col.Width
+			}
+			colWidth -= 4 // TODO: why does this fix wrapping?
+		}
+
+		columns = append(columns, table.Column{
+			Title: col,
+			Width: colWidth,
+		})
+	}
+
+	nCols := len(columns)
+
+	for _, item := range l.Items {
+		row := table.Row{}
+		cell := ""
+		for _, span := range item.Tag {
+			if len(row) >= nCols { // too many cells in this row, parsing error?
+				break
+			}
+			if ts, ok := span.(textSpan); ok && ts.Typ == tagTableCellSeparator {
+				row = append(row, cell)
+				cell = ""
+				continue
+			}
+			cell += span.Render(columns[len(row)].Width)
+		}
+		row = append(row, cell)
+		rows = append(rows, row)
+	}
+
+	s := table.DefaultStyles()
+	s.Selected = lipgloss.NewStyle()
+	tbl := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithWidth(width),
+		table.WithHeight(len(rows)),
+		table.WithStyles(s),
+	)
+
+	rendered := tbl.View()
+	firstLine := strings.Index(rendered, "\n")
+	withoutHeader := rendered[firstLine+1:]
+
+	return "\n\n" + withoutHeader
 }
