@@ -224,7 +224,9 @@ func (l list) RenderTable(width int) string {
 			}
 			cell += span.Render(columns[len(row)].Width)
 		}
-		row = append(row, cell)
+		if len(cell) > 0 {
+			row = append(row, cell)
+		}
 		rows = append(rows, row)
 	}
 
