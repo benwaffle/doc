@@ -551,7 +551,9 @@ func (p *parser) parseMdoc(doc string) manPage {
 			if err != nil {
 				panic(err)
 			}
-			for i, arg := range args {
+			for i := 0; i < len(args); i += 1 {
+				arg := args[i]
+
 				switch arg {
 				case "-bullet":
 					list.Typ = bulletList
@@ -577,6 +579,7 @@ func (p *parser) parseMdoc(doc string) manPage {
 					list.Compact = true
 				case "-offset":
 					// TODO: handle left, center, indent, indent-two, right
+					i += 1
 				default:
 					if list.Typ == columnList {
 						list.Columns = append(list.Columns, arg)
