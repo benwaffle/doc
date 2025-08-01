@@ -90,7 +90,7 @@ func readManPage(path string) (string, error) {
 }
 
 func dumpAst(page manPage) {
-	bytes, err := json.Marshal(page)
+	bytes, err := json.MarshalIndent(page, "", "  ")
 	if err != nil {
 		panic(err)
 	}
