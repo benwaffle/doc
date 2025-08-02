@@ -33,7 +33,8 @@ func findDocInManSection(sectionDir, target string) string {
 func findDocInManDir(mandir, target string) string {
 	dirs, err := os.ReadDir(mandir)
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "Bad entry in MANPATH: %s\n", err)
+		return ""
 	}
 
 	for _, dir := range dirs {
