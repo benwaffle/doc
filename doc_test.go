@@ -64,5 +64,25 @@ func TestMerge(t *testing.T) {
 	if !slices.Equal(page.Sections[0].Contents, expected) {
 		t.Errorf("%+v did not equal %+v", page.Sections[0].Contents, expected)
 	}
+}
 
+func TestMergeSpansParagraphs(t *testing.T) {
+	manText := `.Sh DESCRIPTION
+First paragraph.
+.Pp
+Second paragraph.`
+
+	parser := parser{}
+	page := parser.parseMdoc(manText)
+	page.mergeSpans()
+
+	expected := []Span{
+		textSpan{Typ: tagPlain, Text: "First paragraph.", NoSpace: false},
+		textSpan{Typ: tagPlain, Text: "\n\n", NoSpace: true},
+		textSpan{Typ: tagPlain, Text: "Second paragraph.", NoSpace: false},
+	}
+
+	if !slices.Equal(page.Sections[0].Contents, expected) {
+		t.Errorf("Got: %+v\nExpected: %+v", page.Sections[0].Contents, expected)
+	}
 }

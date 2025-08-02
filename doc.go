@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -125,6 +127,14 @@ func parseError(line int, info string, err error) error {
 	return fmt.Errorf("Error parsing %s on line %d: %w", info, line, err)
 }
 
+func (page manPage) dump(filename string) {
+	bytes, err := json.MarshalIndent(page, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	os.WriteFile(filename, bytes, 0666)
+}
+
 // Merge adjacent spans if possible. This makes ast.json much easier to read.
 func (page *manPage) mergeSpans() {
 	for i, section := range page.Sections {
@@ -132,7 +142,6 @@ func (page *manPage) mergeSpans() {
 		var contents []Span
 		var merged *textSpan = nil
 		for _, span := range section.Contents {
-
 			if merged == nil { // new range
 				if ts, ok := span.(textSpan); ok {
 					merged = &ts
@@ -157,10 +166,9 @@ func (page *manPage) mergeSpans() {
 					merged = nil
 				}
 			}
-
 		}
 		if merged != nil {
-			contents = append(contents, merged)
+			contents = append(contents, *merged)
 		}
 		section.Contents = contents
 		page.Sections[i] = section
@@ -615,7 +623,7 @@ func (p *parser) parseMdoc(doc string) manPage {
 			// TODO: do we need this?
 
 		case line == ".Pp" || line == ".PP":
-			addSpans(textSpan{tagPlain, "\n\n", false})
+			addSpans(textSpan{tagPlain, "\n\n", true})
 
 		case line == ".br":
 			addSpans(textSpan{tagPlain, "\n", false})

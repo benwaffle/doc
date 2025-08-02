@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"compress/gzip"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -89,14 +88,6 @@ func readManPage(path string) (string, error) {
 	return string(data), nil
 }
 
-func dumpAst(page manPage) {
-	bytes, err := json.MarshalIndent(page, "", "  ")
-	if err != nil {
-		panic(err)
-	}
-	os.WriteFile("ast.json", bytes, 0666)
-}
-
 func main() {
 	if len(os.Args) != 2 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <command>\n", os.Args[0])
@@ -125,8 +116,9 @@ func main() {
 
 	parser := parser{}
 	page := parser.parseMdoc(data)
+	page.dump("ast-premerge.json")
 	page.mergeSpans()
-	dumpAst(page)
+	page.dump("ast-postmerge.json")
 
 	p := tea.NewProgram(
 		NewModel(page),
